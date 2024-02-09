@@ -2,14 +2,18 @@
 from pathlib import Path
 import numpy as np
 
-import spikeinterface as si
-import probeinterface as pi
 from uuid import uuid4
 
-from neuroconv.tools.spikeinterface import add_waveforms
+import probeinterface as pi
+import spikeinterface as si
+# needed to lead extensions
+import spikeinterface.postprocessing as spost
+import spikeinterface.qualitymetrics as sqm
 
-from pynwb import Device
+from neuroconv.tools.spikeinterface.spikeinterface import add_waveforms
+
 from pynwb import NWBHDF5IO
+from pynwb.file import Device
 from hdmf_zarr import NWBZarrIO
 
 from utils import get_devices_from_metadata
@@ -29,7 +33,7 @@ skip_unit_properties = [
 
 if __name__ == "__main__":
     # find base NWB file
-    nwb_files = [p for p in data_folder.iterdir() if p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")]
+    nwb_files = [p for p in data_folder.glob("**/*") if p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")]
     assert len(nwb_files) == 1, "Attach one base NWB file data at a time"
     nwbfile_input_path = nwb_files[0]
 
@@ -48,7 +52,7 @@ if __name__ == "__main__":
     ecephys_folders = [
         p
         for p in data_folder.iterdir()
-        if p.is_dir() and "ecephys" in p.name or "behavior" in p.name and "sorted" not in p.name
+        if p.is_dir() and ("ecephys" in p.name or "behavior" in p.name) and ("sorted" not in p.name and "nwb" not in p.name)
     ]
     assert len(ecephys_folders) == 1, "Attach one ecephys folder at a time"
     ecephys_folder = ecephys_folders[0]
@@ -63,9 +67,11 @@ if __name__ == "__main__":
     if len(sorted_folders) == 0:
         # pipeline mode
         sorted_folder = data_folder
+        output_folder = results_folder / "nwb"
     elif len(sorted_folders) == 1:
         # capsule mode
         sorted_folder = sorted_folders[0]
+        output_folder = results_folder
 
     postprocessed_folder = sorted_folder / "postprocessed"
     curated_folder = sorted_folder / "curated"
@@ -94,14 +100,18 @@ if __name__ == "__main__":
         if stream_name not in stream_names:
             stream_names.append(stream_name)
 
+    nwb_output_files = []
     for block_index, experiment_id in enumerate(experiment_ids):
         for segment_index, recording_id in enumerate(recording_ids):
+            nwbfile_output_path = output_folder / nwbfile_input_path.name
+
             # Find probe devices
             devices, target_locations = get_devices_from_metadata(ecephys_folder, segment_index=segment_index)
 
             with io_class(str(nwbfile_input_path), "r") as read_io:
                 nwbfile = read_io.read()
 
+                added_stream_names = []
                 for stream_name in stream_names:
                     recording_name = f"experiment{experiment_id}_{stream_name}_recording{recording_id}"
                     if not (curated_folder / recording_name).is_dir():
@@ -109,6 +119,8 @@ if __name__ == "__main__":
                             f"Stream {stream_name} for experiment {experiment_id} and recording {recording_id} does not exist"
                         )
                         continue
+
+                    added_stream_names.append(stream_name)
 
                     # Read Zarr recording
                     zarr_folder = ecephys_compressed_folder / f"experiment{experiment_id}_{stream_name}.zarr"
@@ -131,9 +143,6 @@ if __name__ == "__main__":
                         # version<v0.6
                         sync_times = np.load(stream_folder / "synchronized_timestamps.npy")
                     recording = si.split_recording(recording)[segment_index]
-                    if recording_start_time is None:
-                        recording_start_time = sync_times[0]
-                        recording_stop_time = sync_times[-1]
 
                     if len(sync_times) == recording.get_num_samples():
                         original_times = recording.get_times()
@@ -150,7 +159,7 @@ if __name__ == "__main__":
                         postprocessed_folder / recording_name, sorting=sorting_curated, with_recording=False
                     )
                     # Add 'amplitude' property
-                    amplitudes = list(np.round(si.get_template_extremum_amplitude(we).values(), 2))
+                    amplitudes = np.round(list(si.get_template_extremum_amplitude(we).values()), 2)
                     sorting_curated.set_property("amplitude", amplitudes)
                     print(f"\tAdding {len(sorting_curated.unit_ids)} units from stream {stream_name}")
 
@@ -228,5 +237,11 @@ if __name__ == "__main__":
                         skip_properties=skip_unit_properties,
                         units_description="Units from Kilosort2.5",
                         recording=recording,
-                        write_electrical_series=False,
                     )
+
+                print(f"Added {len(added_stream_names)} streams")
+
+                with io_class(str(nwbfile_output_path), "w") as export_io:
+                    export_io.export(src_io=read_io, nwbfile=nwbfile)
+                print(f"Done writing {nwbfile_output_path}")
+                nwb_output_files.append(nwbfile_output_path)

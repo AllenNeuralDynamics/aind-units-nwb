@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+
+pip install --no-cache-dir --ignore-installed pynwb==2.5.0 neuroconv==0.4.6 hdmf-zarr==0.5.0
