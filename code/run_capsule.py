@@ -68,6 +68,7 @@ if __name__ == "__main__":
         # pipeline mode
         sorted_folder = data_folder
         output_folder = results_folder / "nwb"
+        output_folder.mkdir(exist_ok=True)
     elif len(sorted_folders) == 1:
         # capsule mode
         sorted_folder = sorted_folders[0]
