@@ -1,6 +1,7 @@
 """ Writes Units to an NWB file """
 from pathlib import Path
 import numpy as np
+import shutil
 
 from uuid import uuid4
 
@@ -40,11 +41,9 @@ if __name__ == "__main__":
     if nwbfile_input_path.is_dir():
         assert (nwbfile_input_path / ".zattrs").is_file(), f"{nwbfile_input_path.name} is not a valid Zarr folder"
         NWB_BACKEND = "zarr"
-        NWB_SUFFIX = ".nwb.zarr"
         io_class = NWBZarrIO
     else:
         NWB_BACKEND = "hdf5"
-        NWB_SUFFIX = ".nwb"
         io_class = NWBHDF5IO
     print(f"NWB backend: {NWB_BACKEND}")
 
@@ -105,11 +104,14 @@ if __name__ == "__main__":
     for block_index, experiment_id in enumerate(experiment_ids):
         for segment_index, recording_id in enumerate(recording_ids):
             nwbfile_output_path = output_folder / nwbfile_input_path.name
-
+            if NWB_BACKEND == "hdf5":
+                shutil.copyfile(nwbfile_input_path, nwbfile_output_path)
+            else:
+                shutil.copytree(nwbfile_input_path, nwbfile_output_path)
             # Find probe devices
             devices, target_locations = get_devices_from_metadata(ecephys_folder, segment_index=segment_index)
 
-            with io_class(str(nwbfile_input_path), "r") as read_io:
+            with io_class(str(nwbfile_output_path), "a") as read_io:
                 nwbfile = read_io.read()
 
                 added_stream_names = []
@@ -242,7 +244,8 @@ if __name__ == "__main__":
 
                 print(f"Added {len(added_stream_names)} streams")
 
-                with io_class(str(nwbfile_output_path), "w") as export_io:
-                    export_io.export(src_io=read_io, nwbfile=nwbfile)
+                # with io_class(str(nwbfile_output_path), "w") as export_io:
+                #     export_io.export(src_io=read_io, nwbfile=nwbfile)
+                read_io.write(nwbfile)
                 print(f"Done writing {nwbfile_output_path}")
                 nwb_output_files.append(nwbfile_output_path)
