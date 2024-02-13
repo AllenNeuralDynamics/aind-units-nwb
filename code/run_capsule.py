@@ -1,7 +1,8 @@
 """ Writes Units to an NWB file """
+import shutil
+import json
 from pathlib import Path
 import numpy as np
-import shutil
 
 from uuid import uuid4
 
@@ -11,13 +12,11 @@ import spikeinterface as si
 import spikeinterface.postprocessing as spost
 import spikeinterface.qualitymetrics as sqm
 
-from neuroconv.tools.spikeinterface.spikeinterface import add_waveforms
-
 from pynwb import NWBHDF5IO
 from pynwb.file import Device
 from hdmf_zarr import NWBZarrIO
 
-from utils import get_devices_from_metadata
+from utils import get_devices_from_metadata, add_waveforms_with_uneven_channels
 
 
 data_folder = Path("../data")
@@ -104,14 +103,11 @@ if __name__ == "__main__":
     for block_index, experiment_id in enumerate(experiment_ids):
         for segment_index, recording_id in enumerate(recording_ids):
             nwbfile_output_path = output_folder / nwbfile_input_path.name
-            if NWB_BACKEND == "hdf5":
-                shutil.copyfile(nwbfile_input_path, nwbfile_output_path)
-            else:
-                shutil.copytree(nwbfile_input_path, nwbfile_output_path)
+
             # Find probe devices
             devices, target_locations = get_devices_from_metadata(ecephys_folder, segment_index=segment_index)
 
-            with io_class(str(nwbfile_output_path), "a") as read_io:
+            with io_class(str(nwbfile_input_path), "r") as read_io:
                 nwbfile = read_io.read()
 
                 added_stream_names = []
@@ -155,23 +151,6 @@ if __name__ == "__main__":
                             f"recording{segment_index+1}: mismatch between num samples ({recording.get_num_samples()}) and timestamps ({len(sync_times)})"
                         )
 
-                    sorting_curated = si.load_extractor(curated_folder / recording_name)
-                    # register recording for precise timestamps
-                    sorting_curated.register_recording(recording)
-                    we = si.load_waveforms(
-                        postprocessed_folder / recording_name, sorting=sorting_curated, with_recording=False
-                    )
-                    # Add 'amplitude' property
-                    amplitudes = np.round(list(si.get_template_extremum_amplitude(we).values()), 2)
-                    sorting_curated.set_property("amplitude", amplitudes)
-                    print(f"\tAdding {len(sorting_curated.unit_ids)} units from stream {stream_name}")
-
-                    # Add property for channel quality
-                    good_channel_mask = np.isin(recording.channel_ids, we.channel_ids)
-                    channel_quality = np.array(["good"] * len(recording.channel_ids))
-                    channel_quality[~good_channel_mask] = "bad"
-                    recording.set_property("quality", channel_quality)
-
                     # Add device and electrode group
                     if devices:
                         for device_name, device in devices.items():
@@ -206,12 +185,6 @@ if __name__ == "__main__":
                             nwbfile.add_device(probe_device)
                             print(f"\tAdded probe device: {probe_device.name} from probeinterface")
 
-                    # Add unit properties (UUID and probe info, ks_unit_id)
-                    unit_uuids = [str(uuid4()) for u in sorting_curated.unit_ids]
-                    sorting_curated.set_property("device_name", [probe_device_name] * sorting_curated.get_num_units())
-                    sorting_curated.set_property("unit_name", unit_uuids)
-                    sorting_curated.set_property("ks_unit_id", sorting_curated.unit_ids)
-
                     electrode_metadata = dict(
                         Ecephys=dict(
                             Device=[dict(name=probe_device_name)],
@@ -226,26 +199,47 @@ if __name__ == "__main__":
                         )
                     )
 
-                    # Add channel properties (group_name property to associate electrodes with group)
-                    recording.set_channel_groups([probe_device_name] * recording.get_num_channels())
+                    we = si.load_waveforms(
+                        postprocessed_folder / recording_name, with_recording=False
+                    )
 
+                    # Load curated sorting and set properties
+                    sorting_curated = si.load_extractor(curated_folder / recording_name)
+
+                    # Add unit properties (UUID and probe info, ks_unit_id)
+                    unit_uuids = [str(uuid4()) for u in sorting_curated.unit_ids]
+                    sorting_curated.set_property("device_name", [probe_device_name] * sorting_curated.get_num_units())
+                    sorting_curated.set_property("unit_name", unit_uuids)
+                    sorting_curated.set_property("ks_unit_id", sorting_curated.unit_ids)
+
+                    # Add 'amplitude' property
+                    amplitudes = np.round(list(si.get_template_extremum_amplitude(we).values()), 2)
+                    sorting_curated.set_property("amplitude", amplitudes)
+                    print(f"\tAdding {len(sorting_curated.unit_ids)} units from stream {stream_name}")
+
+                    # Register recording for precise timestamps
+                    sorting_curated.register_recording(recording)
                     we.sorting = sorting_curated
 
-                    # print("NWB metadata:\n", electrode_metadata)
-                    print("\tAdding sorting and waveforms data")
-                    add_waveforms(
-                        we,
+                    # Retrieve sorter name
+                    sorter_log_file = spikesorted_folder / recording_name / "spikeinterface_log.json"
+                    units_description = "Units"
+                    with open(sorter_log_file, "r") as f:
+                        sorter_log = json.load(f)
+                        sorter_name = sorter_log["sorter_name"]
+                        units_description += f" from {sorter_name.capitalize()}"
+                    add_waveforms_with_uneven_channels(
+                        waveform_extractor=we,
+                        recording=recording,
                         nwbfile=nwbfile,
                         metadata=electrode_metadata,
                         skip_properties=skip_unit_properties,
-                        units_description="Units from Kilosort2.5",
-                        recording=recording,
+                        units_description=units_description,
                     )
 
                 print(f"Added {len(added_stream_names)} streams")
 
-                # with io_class(str(nwbfile_output_path), "w") as export_io:
-                #     export_io.export(src_io=read_io, nwbfile=nwbfile)
-                read_io.write(nwbfile)
+                with io_class(str(nwbfile_output_path), "w") as export_io:
+                    export_io.export(src_io=read_io, nwbfile=nwbfile)
                 print(f"Done writing {nwbfile_output_path}")
                 nwb_output_files.append(nwbfile_output_path)
