@@ -102,7 +102,11 @@ if __name__ == "__main__":
     nwb_output_files = []
     for block_index, experiment_id in enumerate(experiment_ids):
         for segment_index, recording_id in enumerate(recording_ids):
-            nwbfile_output_path = output_folder / nwbfile_input_path.name
+            # add recording/experiment id
+            nwb_file_name = (
+                f"experiment{experiment_id}_{nwbfile_input_path.stem}_recording{recording_id}.nwb"
+            )
+            nwbfile_output_path = output_folder / nwb_file_name
 
             # Find probe devices
             devices, target_locations = get_devices_from_metadata(ecephys_folder, segment_index=segment_index)
