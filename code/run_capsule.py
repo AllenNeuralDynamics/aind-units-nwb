@@ -119,7 +119,8 @@ if __name__ == "__main__":
                     recording_name = f"experiment{experiment_id}_{stream_name}_recording{recording_id}"
                     if not (curated_folder / recording_name).is_dir():
                         print(
-                            f"Stream {stream_name} for experiment {experiment_id} and recording {recording_id} does not exist"
+                            f"Curated units for stream {stream_name} for experiment "
+                            f"{experiment_id} and recording {recording_id} not found."
                         )
                         continue
 
