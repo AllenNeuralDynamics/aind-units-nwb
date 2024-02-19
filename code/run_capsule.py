@@ -104,7 +104,7 @@ if __name__ == "__main__":
         for segment_index, recording_id in enumerate(recording_ids):
             # add recording/experiment id
             nwb_file_name = (
-                f"experiment{experiment_id}_{nwbfile_input_path.stem}_recording{recording_id}.nwb"
+                f"{nwbfile_input_path.stem}_experiment{experiment_id}_recording{recording_id}.nwb"
             )
             nwbfile_output_path = output_folder / nwb_file_name
 
