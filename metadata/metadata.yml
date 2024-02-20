@@ -1,5 +1,13 @@
 metadata_version: 1
 name: NWB-Packaging-Units
-description: Basic structure of a capsule to be customized as needed.
+description: This specialized capsule is designed to append units information to a
+  base NWB file, including spiking data and unit properties. In particular, it adds
+  the Units table and several properties associated with the units, such as quality
+  metrics, template metrics, as well as waveform mean and standard deviation. If the
+  input session contains multiple experiments/recordings, one NWB file for each experiment-recording
+  pair is produced.
+tags:
+- NWB
 authors:
 - name: AIND
+- name: Alessio Buccino
