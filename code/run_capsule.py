@@ -77,177 +77,176 @@ if __name__ == "__main__":
     spikesorted_folder = sorted_folder / "spikesorted"
     if not postprocessed_folder.is_dir():
         print("Postprocessed folder not found. Skipping NWB export")
-        return
     else:
         assert curated_folder.is_dir(), f"Curated folder {curated_folder} does not exist"
         assert spikesorted_folder.is_dir(), f"Spikesorted folder {spikesorted_folder} does not exist"
 
-    # we create a result NWB file for each experiment/recording
-    recording_names = [p.name for p in curated_folder.iterdir() if p.is_dir()]
+        # we create a result NWB file for each experiment/recording
+        recording_names = [p.name for p in curated_folder.iterdir() if p.is_dir()]
 
-    # find experiment and recording ids
-    experiment_ids = []
-    recording_ids = []
-    stream_names = []
-    for recording_name in recording_names:
-        experiment_str = recording_name.split("_")[0]
-        recording_str = recording_name.split("_")[-1]
-        stream_name = "_".join(recording_name.split("_")[1:-1])
-        experiment_id = int(experiment_str[len("experiment") :])
-        recording_id = int(recording_str[len("recording") :])
-        if experiment_id not in experiment_ids:
-            experiment_ids.append(experiment_id)
-        if recording_id not in recording_ids:
-            recording_ids.append(recording_id)
-        if stream_name not in stream_names:
-            stream_names.append(stream_name)
+        # find experiment and recording ids
+        experiment_ids = []
+        recording_ids = []
+        stream_names = []
+        for recording_name in recording_names:
+            experiment_str = recording_name.split("_")[0]
+            recording_str = recording_name.split("_")[-1]
+            stream_name = "_".join(recording_name.split("_")[1:-1])
+            experiment_id = int(experiment_str[len("experiment") :])
+            recording_id = int(recording_str[len("recording") :])
+            if experiment_id not in experiment_ids:
+                experiment_ids.append(experiment_id)
+            if recording_id not in recording_ids:
+                recording_ids.append(recording_id)
+            if stream_name not in stream_names:
+                stream_names.append(stream_name)
 
-    nwb_output_files = []
-    for block_index, experiment_id in enumerate(experiment_ids):
-        for segment_index, recording_id in enumerate(recording_ids):
-            # add recording/experiment id
-            nwb_file_name = (
-                f"{nwbfile_input_path.stem}_experiment{experiment_id}_recording{recording_id}.nwb"
-            )
-            nwbfile_output_path = output_folder / nwb_file_name
+        nwb_output_files = []
+        for block_index, experiment_id in enumerate(experiment_ids):
+            for segment_index, recording_id in enumerate(recording_ids):
+                # add recording/experiment id
+                nwb_file_name = (
+                    f"{nwbfile_input_path.stem}_experiment{experiment_id}_recording{recording_id}.nwb"
+                )
+                nwbfile_output_path = output_folder / nwb_file_name
 
-            # Find probe devices
-            devices, target_locations = get_devices_from_metadata(ecephys_folder, segment_index=segment_index)
+                # Find probe devices
+                devices, target_locations = get_devices_from_metadata(ecephys_folder, segment_index=segment_index)
 
-            with io_class(str(nwbfile_input_path), "r") as read_io:
-                nwbfile = read_io.read()
+                with io_class(str(nwbfile_input_path), "r") as read_io:
+                    nwbfile = read_io.read()
 
-                added_stream_names = []
-                for stream_name in stream_names:
-                    recording_name = f"experiment{experiment_id}_{stream_name}_recording{recording_id}"
-                    if not (curated_folder / recording_name).is_dir():
-                        print(
-                            f"Curated units for stream {stream_name} for experiment "
-                            f"{experiment_id} and recording {recording_id} not found."
+                    added_stream_names = []
+                    for stream_name in stream_names:
+                        recording_name = f"experiment{experiment_id}_{stream_name}_recording{recording_id}"
+                        if not (curated_folder / recording_name).is_dir():
+                            print(
+                                f"Curated units for stream {stream_name} for experiment "
+                                f"{experiment_id} and recording {recording_id} not found."
+                            )
+                            continue
+
+                        added_stream_names.append(stream_name)
+
+                        # Read Zarr recording
+                        zarr_folder = ecephys_compressed_folder / f"experiment{experiment_id}_{stream_name}.zarr"
+                        recording = si.load_extractor(zarr_folder)
+
+                        # Load synchronized timestamps and attach to recording
+                        record_node, oe_stream_name = stream_name.split("#")
+                        recording_folder = ecephys_clipped_folder / record_node
+                        stream_folder = (
+                            recording_folder
+                            / f"experiment{experiment_id}"
+                            / f"recording{recording_id}"
+                            / "continuous"
+                            / oe_stream_name
                         )
-                        continue
-
-                    added_stream_names.append(stream_name)
-
-                    # Read Zarr recording
-                    zarr_folder = ecephys_compressed_folder / f"experiment{experiment_id}_{stream_name}.zarr"
-                    recording = si.load_extractor(zarr_folder)
-
-                    # Load synchronized timestamps and attach to recording
-                    record_node, oe_stream_name = stream_name.split("#")
-                    recording_folder = ecephys_clipped_folder / record_node
-                    stream_folder = (
-                        recording_folder
-                        / f"experiment{experiment_id}"
-                        / f"recording{recording_id}"
-                        / "continuous"
-                        / oe_stream_name
-                    )
-                    if (stream_folder / "sample_numbers.npy").is_file():
-                        # version>=v0.6
-                        sync_times = np.load(stream_folder / "timestamps.npy")
-                    else:
-                        # version<v0.6
-                        sync_times = np.load(stream_folder / "synchronized_timestamps.npy")
-                    recording = si.split_recording(recording)[segment_index]
-
-                    if len(sync_times) == recording.get_num_samples():
-                        original_times = recording.get_times()
-                        recording.set_times(sync_times, with_warning=False)
-                    else:
-                        print(
-                            f"recording{segment_index+1}: mismatch between num samples ({recording.get_num_samples()}) and timestamps ({len(sync_times)})"
-                        )
-
-                    # Add device and electrode group
-                    if devices:
-                        for device_name, device in devices.items():
-                            probe_no_spaces = device_name.replace(" ", "")
-                            if probe_no_spaces in oe_stream_name:
-                                if device_name not in nwbfile.devices:
-                                    nwbfile.add_device(devices[device_name])
-                                probe_device_name = probe_no_spaces
-                                if device_name in target_locations:
-                                    electrode_group_location = target_locations[device_name]
-                                else:
-                                    electrode_group_location = "unknown"
-                                print(f"Found device from rig: {probe_device_name}")
-                                break
-                    else:
-                        # if devices not found in metadata, instantiate using probeinterface
-                        electrode_group_location = "unknown"
-                        if experiment_id == 1:
-                            settings_file = recording_folder / "settings.xml"
+                        if (stream_folder / "sample_numbers.npy").is_file():
+                            # version>=v0.6
+                            sync_times = np.load(stream_folder / "timestamps.npy")
                         else:
-                            settings_file = recording_folder / f"settings_{experiment_id}.xml"
-                        probe = pi.read_openephys(settings_file, stream_name=oe_stream_name)
-                        probe_device_name = probe.name
-                        probe_device_description = f"Model: {probe.model_name} - Serial number: {probe.serial_number}"
-                        probe_device_manufacturer = f"{probe.manufacturer}"
-                        probe_device = Device(
-                            name=probe_device_name,
-                            description=probe_device_description,
-                            manufacturer=probe_device_manufacturer,
+                            # version<v0.6
+                            sync_times = np.load(stream_folder / "synchronized_timestamps.npy")
+                        recording = si.split_recording(recording)[segment_index]
+
+                        if len(sync_times) == recording.get_num_samples():
+                            original_times = recording.get_times()
+                            recording.set_times(sync_times, with_warning=False)
+                        else:
+                            print(
+                                f"recording{segment_index+1}: mismatch between num samples ({recording.get_num_samples()}) and timestamps ({len(sync_times)})"
+                            )
+
+                        # Add device and electrode group
+                        if devices:
+                            for device_name, device in devices.items():
+                                probe_no_spaces = device_name.replace(" ", "")
+                                if probe_no_spaces in oe_stream_name:
+                                    if device_name not in nwbfile.devices:
+                                        nwbfile.add_device(devices[device_name])
+                                    probe_device_name = probe_no_spaces
+                                    if device_name in target_locations:
+                                        electrode_group_location = target_locations[device_name]
+                                    else:
+                                        electrode_group_location = "unknown"
+                                    print(f"Found device from rig: {probe_device_name}")
+                                    break
+                        else:
+                            # if devices not found in metadata, instantiate using probeinterface
+                            electrode_group_location = "unknown"
+                            if experiment_id == 1:
+                                settings_file = recording_folder / "settings.xml"
+                            else:
+                                settings_file = recording_folder / f"settings_{experiment_id}.xml"
+                            probe = pi.read_openephys(settings_file, stream_name=oe_stream_name)
+                            probe_device_name = probe.name
+                            probe_device_description = f"Model: {probe.model_name} - Serial number: {probe.serial_number}"
+                            probe_device_manufacturer = f"{probe.manufacturer}"
+                            probe_device = Device(
+                                name=probe_device_name,
+                                description=probe_device_description,
+                                manufacturer=probe_device_manufacturer,
+                            )
+                            if probe_device_name not in nwbfile.devices:
+                                nwbfile.add_device(probe_device)
+                                print(f"\tAdded probe device: {probe_device.name} from probeinterface")
+
+                        electrode_metadata = dict(
+                            Ecephys=dict(
+                                Device=[dict(name=probe_device_name)],
+                                ElectrodeGroup=[
+                                    dict(
+                                        name=probe_device_name,
+                                        description=f"Recorded electrodes from probe {probe_device_name}",
+                                        location=electrode_group_location,
+                                        device=probe_device_name,
+                                    )
+                                ],
+                            )
                         )
-                        if probe_device_name not in nwbfile.devices:
-                            nwbfile.add_device(probe_device)
-                            print(f"\tAdded probe device: {probe_device.name} from probeinterface")
 
-                    electrode_metadata = dict(
-                        Ecephys=dict(
-                            Device=[dict(name=probe_device_name)],
-                            ElectrodeGroup=[
-                                dict(
-                                    name=probe_device_name,
-                                    description=f"Recorded electrodes from probe {probe_device_name}",
-                                    location=electrode_group_location,
-                                    device=probe_device_name,
-                                )
-                            ],
+                        we = si.load_waveforms(
+                            postprocessed_folder / recording_name, with_recording=False
                         )
-                    )
 
-                    we = si.load_waveforms(
-                        postprocessed_folder / recording_name, with_recording=False
-                    )
+                        # Load curated sorting and set properties
+                        sorting_curated = si.load_extractor(curated_folder / recording_name)
 
-                    # Load curated sorting and set properties
-                    sorting_curated = si.load_extractor(curated_folder / recording_name)
+                        # Add unit properties (UUID and probe info, ks_unit_id)
+                        unit_uuids = [str(uuid4()) for u in sorting_curated.unit_ids]
+                        sorting_curated.set_property("device_name", [probe_device_name] * sorting_curated.get_num_units())
+                        sorting_curated.set_property("unit_name", unit_uuids)
+                        sorting_curated.set_property("ks_unit_id", sorting_curated.unit_ids)
 
-                    # Add unit properties (UUID and probe info, ks_unit_id)
-                    unit_uuids = [str(uuid4()) for u in sorting_curated.unit_ids]
-                    sorting_curated.set_property("device_name", [probe_device_name] * sorting_curated.get_num_units())
-                    sorting_curated.set_property("unit_name", unit_uuids)
-                    sorting_curated.set_property("ks_unit_id", sorting_curated.unit_ids)
+                        # Add 'amplitude' property
+                        amplitudes = np.round(list(si.get_template_extremum_amplitude(we).values()), 2)
+                        sorting_curated.set_property("amplitude", amplitudes)
+                        print(f"\tAdding {len(sorting_curated.unit_ids)} units from stream {stream_name}")
 
-                    # Add 'amplitude' property
-                    amplitudes = np.round(list(si.get_template_extremum_amplitude(we).values()), 2)
-                    sorting_curated.set_property("amplitude", amplitudes)
-                    print(f"\tAdding {len(sorting_curated.unit_ids)} units from stream {stream_name}")
+                        # Register recording for precise timestamps
+                        sorting_curated.register_recording(recording)
+                        we.sorting = sorting_curated
 
-                    # Register recording for precise timestamps
-                    sorting_curated.register_recording(recording)
-                    we.sorting = sorting_curated
+                        # Retrieve sorter name
+                        sorter_log_file = spikesorted_folder / recording_name / "spikeinterface_log.json"
+                        units_description = "Units"
+                        with open(sorter_log_file, "r") as f:
+                            sorter_log = json.load(f)
+                            sorter_name = sorter_log["sorter_name"]
+                            units_description += f" from {sorter_name.capitalize()}"
+                        add_waveforms_with_uneven_channels(
+                            waveform_extractor=we,
+                            recording=recording,
+                            nwbfile=nwbfile,
+                            metadata=electrode_metadata,
+                            skip_properties=skip_unit_properties,
+                            units_description=units_description,
+                        )
 
-                    # Retrieve sorter name
-                    sorter_log_file = spikesorted_folder / recording_name / "spikeinterface_log.json"
-                    units_description = "Units"
-                    with open(sorter_log_file, "r") as f:
-                        sorter_log = json.load(f)
-                        sorter_name = sorter_log["sorter_name"]
-                        units_description += f" from {sorter_name.capitalize()}"
-                    add_waveforms_with_uneven_channels(
-                        waveform_extractor=we,
-                        recording=recording,
-                        nwbfile=nwbfile,
-                        metadata=electrode_metadata,
-                        skip_properties=skip_unit_properties,
-                        units_description=units_description,
-                    )
+                    print(f"Added {len(added_stream_names)} streams")
 
-                print(f"Added {len(added_stream_names)} streams")
-
-                with io_class(str(nwbfile_output_path), "w") as export_io:
-                    export_io.export(src_io=read_io, nwbfile=nwbfile)
-                print(f"Done writing {nwbfile_output_path}")
-                nwb_output_files.append(nwbfile_output_path)
+                    with io_class(str(nwbfile_output_path), "w") as export_io:
+                        export_io.export(src_io=read_io, nwbfile=nwbfile)
+                    print(f"Done writing {nwbfile_output_path}")
+                    nwb_output_files.append(nwbfile_output_path)
