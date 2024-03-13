@@ -75,9 +75,12 @@ if __name__ == "__main__":
     postprocessed_folder = sorted_folder / "postprocessed"
     curated_folder = sorted_folder / "curated"
     spikesorted_folder = sorted_folder / "spikesorted"
-    assert postprocessed_folder.is_dir(), f"Postprocessed folder {postprocessed_folder} does not exist"
-    assert curated_folder.is_dir(), f"Curated folder {curated_folder} does not exist"
-    assert spikesorted_folder.is_dir(), f"Spikesorted folder {spikesorted_folder} does not exist"
+    if not postprocessed_folder.is_dir():
+        print("Postprocessed folder not found. Skipping NWB export")
+        return
+    else:
+        assert curated_folder.is_dir(), f"Curated folder {curated_folder} does not exist"
+        assert spikesorted_folder.is_dir(), f"Spikesorted folder {spikesorted_folder} does not exist"
 
     # we create a result NWB file for each experiment/recording
     recording_names = [p.name for p in curated_folder.iterdir() if p.is_dir()]
