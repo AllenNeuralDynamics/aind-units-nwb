@@ -77,6 +77,11 @@ if __name__ == "__main__":
     spikesorted_folder = sorted_folder / "spikesorted"
     if not postprocessed_folder.is_dir():
         print("Postprocessed folder not found. Skipping NWB export")
+        # create dummy nwb folder to avoid pipeline failure
+        error_txt = output_folder / "error.txt"
+        error_txt.write_text(
+            "Postprocessed folder not found. No NWB files were created."
+        )
     else:
         assert curated_folder.is_dir(), f"Curated folder {curated_folder} does not exist"
         assert spikesorted_folder.is_dir(), f"Spikesorted folder {spikesorted_folder} does not exist"
