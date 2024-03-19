@@ -236,10 +236,11 @@ if __name__ == "__main__":
                         # Retrieve sorter name
                         sorter_log_file = spikesorted_folder / recording_name / "spikeinterface_log.json"
                         units_description = "Units"
-                        with open(sorter_log_file, "r") as f:
-                            sorter_log = json.load(f)
-                            sorter_name = sorter_log["sorter_name"]
-                            units_description += f" from {sorter_name.capitalize()}"
+                        if sorter_log_file.is_file():
+                            with open(sorter_log_file, "r") as f:
+                                sorter_log = json.load(f)
+                                sorter_name = sorter_log["sorter_name"]
+                                units_description += f" from {sorter_name.capitalize()}"
                         add_waveforms_with_uneven_channels(
                             waveform_extractor=we,
                             recording=recording,
