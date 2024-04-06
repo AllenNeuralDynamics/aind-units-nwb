@@ -140,28 +140,7 @@ if __name__ == "__main__":
                         # Load synchronized timestamps and attach to recording
                         record_node, oe_stream_name = stream_name.split("#")
                         recording_folder = ecephys_clipped_folder / record_node
-                        stream_folder = (
-                            recording_folder
-                            / f"experiment{experiment_id}"
-                            / f"recording{recording_id}"
-                            / "continuous"
-                            / oe_stream_name
-                        )
-                        if (stream_folder / "sample_numbers.npy").is_file():
-                            # version>=v0.6
-                            sync_times = np.load(stream_folder / "timestamps.npy")
-                        else:
-                            # version<v0.6
-                            sync_times = np.load(stream_folder / "synchronized_timestamps.npy")
                         recording = si.split_recording(recording)[segment_index]
-
-                        if len(sync_times) == recording.get_num_samples():
-                            original_times = recording.get_times()
-                            recording.set_times(sync_times, with_warning=False)
-                        else:
-                            print(
-                                f"recording{segment_index+1}: mismatch between num samples ({recording.get_num_samples()}) and timestamps ({len(sync_times)})"
-                            )
 
                         # Add device and electrode group
                         if devices:
