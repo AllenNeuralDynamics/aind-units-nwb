@@ -33,7 +33,11 @@ skip_unit_properties = [
 
 if __name__ == "__main__":
     # find base NWB file
-    nwb_files = [p for p in data_folder.glob("**/*") if p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")]
+    nwb_files = [
+        p for p in data_folder.glob("**/*") 
+        if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr"))
+        and ("ecephys_" in p.name or "behavior_" in p.name)
+    ]
     assert len(nwb_files) == 1, "Attach one base NWB file data at a time"
     nwbfile_input_path = nwb_files[0]
 
@@ -220,6 +224,8 @@ if __name__ == "__main__":
                                 sorter_log = json.load(f)
                                 sorter_name = sorter_log["sorter_name"]
                                 units_description += f" from {sorter_name.capitalize()}"
+                        # set channel groups to match previously added ephys electrodes
+                        recording.set_channel_groups([probe_device_name] * recording.get_num_channels())
                         add_waveforms_with_uneven_channels(
                             waveform_extractor=we,
                             recording=recording,
