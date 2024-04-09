@@ -113,10 +113,14 @@ if __name__ == "__main__":
         nwb_output_files = []
         for block_index, experiment_id in enumerate(experiment_ids):
             for segment_index, recording_id in enumerate(recording_ids):
-                # add recording/experiment id
-                nwb_file_name = (
-                    f"{nwbfile_input_path.stem}_experiment{experiment_id}_recording{recording_id}.nwb"
-                )
+                # add recording/experiment id if needed
+                nwb_original_file_name = nwbfile_input_path.stem
+                if "experiment" in nwb_original_file_name and "recording" in nwb_original_file_name:
+                    nwb_file_name = f"{nwb_original_file_name}.nwb"
+                else:
+                    nwb_file_name = (
+                        f"{nwb_original_file_name}_experiment{experiment_id}_recording{recording_id}.nwb"
+                    )
                 nwbfile_output_path = output_folder / nwb_file_name
 
                 # Find probe devices
