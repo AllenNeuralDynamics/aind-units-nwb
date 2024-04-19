@@ -60,6 +60,11 @@ if __name__ == "__main__":
     ecephys_folder = ecephys_folders[0]
     ecephys_compressed_folder = ecephys_folder / "ecephys_compressed"
     ecephys_clipped_folder = ecephys_folder / "ecephys_clipped"
+    if ecephys_compressed_folder.is_dir():
+        compressed = True
+    else:
+        compressed = False
+        open_ecephys_folder = ecephys_folder / "ecephys"
 
     # find sorted data
     sorted_folders = [
@@ -142,8 +147,10 @@ if __name__ == "__main__":
                         added_stream_names.append(stream_name)
 
                         # Read Zarr recording
-                        zarr_folder = ecephys_compressed_folder / f"experiment{experiment_id}_{stream_name}.zarr"
-                        recording = si.load_extractor(zarr_folder)
+                        if not compressed:
+                            recording = se.read_openephys(ecephys_folder, stream_name=stream_name, block_index=block_index)
+                        else:
+                            recording = si.read_zarr(ecephys_compressed_folder / f"experiment{experiment_id}_{stream_name}.zarr)
 
                         # Load synchronized timestamps and attach to recording
                         record_node, oe_stream_name = stream_name.split("#")
