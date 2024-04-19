@@ -148,7 +148,12 @@ if __name__ == "__main__":
 
                         # Read Zarr recording
                         if not compressed:
-                            recording = se.read_openephys(ecephys_folder, stream_name=stream_name, block_index=block_index)
+                            recording = se.read_openephys(
+                                ecephys_folder,
+                                stream_name=stream_name,
+                                block_index=block_index,
+                                load_sync_timestamps=True
+                            )
                         else:
                             recording = si.read_zarr(ecephys_compressed_folder / f"experiment{experiment_id}_{stream_name}.zarr")
 
