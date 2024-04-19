@@ -150,7 +150,7 @@ if __name__ == "__main__":
                         if not compressed:
                             recording = se.read_openephys(ecephys_folder, stream_name=stream_name, block_index=block_index)
                         else:
-                            recording = si.read_zarr(ecephys_compressed_folder / f"experiment{experiment_id}_{stream_name}.zarr)
+                            recording = si.read_zarr(ecephys_compressed_folder / f"experiment{experiment_id}_{stream_name}.zarr")
 
                         # Load synchronized timestamps and attach to recording
                         record_node, oe_stream_name = stream_name.split("#")
