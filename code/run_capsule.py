@@ -9,6 +9,7 @@ from uuid import uuid4
 import probeinterface as pi
 import spikeinterface as si
 # needed to lead extensions
+import spikeinterface.extractors as se
 import spikeinterface.postprocessing as spost
 import spikeinterface.qualitymetrics as sqm
 
