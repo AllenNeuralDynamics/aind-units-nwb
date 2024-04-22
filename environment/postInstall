@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -e
+
+git clone https://github.com/alejoe91/spikeinterface.git
+cd spikeinterface
+git checkout fix-get-templates-read-only
+pip install --no-cache-dir .[full,widgets]
+cd ..
+
+
+git clone https://github.com/catalystneuro/neuroconv.git
+cd neuroconv
+git checkout sorting-analyzer
+pip install --no-cache-dir .
+cd ..

@@ -74,7 +74,11 @@ if __name__ == "__main__":
 
     if len(sorted_folders) == 0:
         # pipeline mode
-        sorted_folder = data_folder
+        if (data_folder / "collect_pipeline_output_test").is_dir():
+            print("\n*******************\n**** TEST MODE ****\n*******************\n")
+            sorted_folder = data_folder / "collect_pipeline_output_test"
+        else:
+            sorted_folder = data_folder
         output_folder = results_folder / "nwb"
         output_folder.mkdir(exist_ok=True)
     elif len(sorted_folders) == 1:
@@ -211,8 +215,8 @@ if __name__ == "__main__":
                             )
                         )
 
-                        we = si.load_waveforms(
-                            postprocessed_folder / recording_name, with_recording=False
+                        analyzer = si.load_sorting_analyzer(
+                            postprocessed_folder / recording_name
                         )
 
                         # Load curated sorting and set properties
@@ -225,13 +229,13 @@ if __name__ == "__main__":
                         sorting_curated.set_property("ks_unit_id", sorting_curated.unit_ids)
 
                         # Add 'amplitude' property
-                        amplitudes = np.round(list(si.get_template_extremum_amplitude(we).values()), 2)
+                        amplitudes = np.round(list(si.get_template_extremum_amplitude(analyzer).values()), 2)
                         sorting_curated.set_property("amplitude", amplitudes)
                         print(f"\tAdding {len(sorting_curated.unit_ids)} units from stream {stream_name}")
 
                         # Register recording for precise timestamps
                         sorting_curated.register_recording(recording)
-                        we.sorting = sorting_curated
+                        analyzer.sorting = sorting_curated
 
                         # Retrieve sorter name
                         sorter_log_file = spikesorted_folder / recording_name / "spikeinterface_log.json"
@@ -244,7 +248,7 @@ if __name__ == "__main__":
                         # set channel groups to match previously added ephys electrodes
                         recording.set_channel_groups([probe_device_name] * recording.get_num_channels())
                         add_waveforms_with_uneven_channels(
-                            waveform_extractor=we,
+                            sorting_analyzer=analyzer,
                             recording=recording,
                             nwbfile=nwbfile,
                             metadata=electrode_metadata,

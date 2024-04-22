@@ -5,7 +5,7 @@ from typing import Union, List, Optional, Literal
 from packaging.version import parse
 import numpy as np
 
-from spikeinterface import BaseRecording, WaveformExtractor
+from spikeinterface import BaseRecording, SortingAnalyzer
 
 import pynwb
 from pynwb.file import Device
@@ -127,7 +127,7 @@ def get_devices_from_metadata(session_folder: str, segment_index: int=0):
 
 
 def add_waveforms_with_uneven_channels(
-    waveform_extractor: WaveformExtractor,
+    sorting_analyzer: SortingAnalyzer,
     recording: BaseRecording = None,
     nwbfile: Optional[pynwb.NWBFile] = None,
     metadata: Optional[dict] = None,
@@ -159,22 +159,23 @@ def add_waveforms_with_uneven_channels(
         assert units_name == "units", "When writing to the nwbfile.units table, the name of the table must be 'units'!"
     write_in_processing_module = False if write_as == "units" else True    
 
-    num_units = len(waveform_extractor.unit_ids)
+    num_units = len(sorting_analyzer.unit_ids)
     # pad with zeros if needed
-    if recording.get_num_channels() >= waveform_extractor.get_num_channels():
-        template_means_partial = waveform_extractor.get_all_templates()
-        template_stds_partial = waveform_extractor.get_all_templates()
+    template_ext = sorting_analyzer.get_extension("templates")
+    if recording.get_num_channels() >= sorting_analyzer.get_num_channels():
+        template_means_partial = template_ext.get_templates()
+        template_stds_partial = template_ext.get_templates(operator="std")
         num_samples = template_means_partial.shape[1]
         template_means = np.zeros((num_units, num_samples, recording.get_num_channels()))
         template_stds = np.zeros((num_units, num_samples, recording.get_num_channels()))
-        channel_mask = np.isin(recording.channel_ids, waveform_extractor.channel_ids)
+        channel_mask = np.isin(recording.channel_ids, sorting_analyzer.channel_ids)
         template_means[:, :, channel_mask] = template_means_partial
         template_stds[:, :, channel_mask] = template_stds_partial
     else:
-        template_means = waveform_extractor.get_all_templates()
-        template_stds = waveform_extractor.get_all_templates(mode="std")
+        template_means = template_ext.get_templates()
+        template_stds = template_ext.get_templates(operator="std")
 
-    sorting = waveform_extractor.sorting
+    sorting = sorting_analyzer.sorting
     if unit_ids is not None:
         unit_indices = sorting.ids_to_indices(unit_ids)
         template_means = template_means[unit_indices]
@@ -182,13 +183,13 @@ def add_waveforms_with_uneven_channels(
 
     # metrics properties (quality, template) are added as properties to the sorting copy
     sorting_copy = sorting.select_units(unit_ids=sorting.unit_ids)
-    if waveform_extractor.is_extension("quality_metrics"):
-        qm = waveform_extractor.load_extension("quality_metrics").get_data()
+    if sorting_analyzer.has_extension("quality_metrics"):
+        qm = sorting_analyzer.get_extension("quality_metrics").get_data()
         for prop in qm.columns:
             if prop not in sorting_copy.get_property_keys():
                 sorting_copy.set_property(prop, qm[prop])
-    if waveform_extractor.is_extension("template_metrics"):
-        tm = waveform_extractor.load_extension("template_metrics").get_data()
+    if sorting_analyzer.has_extension("template_metrics"):
+        tm = sorting_analyzer.get_extension("template_metrics").get_data()
         for prop in tm.columns:
             if prop not in sorting_copy.get_property_keys():
                 sorting_copy.set_property(prop, tm[prop])
@@ -206,7 +207,6 @@ def add_waveforms_with_uneven_channels(
         write_in_processing_module=write_in_processing_module,
         units_table_name=units_name,
         unit_table_description=units_description,
-        write_waveforms=False,
         waveform_means=template_means,
         waveform_sds=template_stds,
         unit_electrode_indices=unit_electrode_indices,
