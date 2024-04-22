@@ -63,9 +63,10 @@ if __name__ == "__main__":
     ecephys_clipped_folder = ecephys_folder / "ecephys_clipped"
     if ecephys_compressed_folder.is_dir():
         compressed = True
+        open_ephys_folder = ecephys_clipped_folder
     else:
         compressed = False
-        open_ecephys_folder = ecephys_folder / "ecephys"
+        open_ephys_folder = ecephys_folder / "ecephys"
 
     # find sorted data
     sorted_folders = [
@@ -160,7 +161,7 @@ if __name__ == "__main__":
 
                         # Load synchronized timestamps and attach to recording
                         record_node, oe_stream_name = stream_name.split("#")
-                        recording_folder = ecephys_clipped_folder / record_node
+                        recording_folder = open_ephys_folder / record_node
                         recording = si.split_recording(recording)[segment_index]
 
                         # Add device and electrode group
