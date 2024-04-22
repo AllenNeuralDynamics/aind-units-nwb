@@ -163,7 +163,7 @@ def add_waveforms_with_uneven_channels(
     # pad with zeros if needed
     if recording.get_num_channels() >= waveform_extractor.get_num_channels():
         template_means_partial = waveform_extractor.get_all_templates()
-        template_stds_partial = waveform_extractor.get_all_templates()
+        template_stds_partial = waveform_extractor.get_all_templates(mode="std")
         num_samples = template_means_partial.shape[1]
         template_means = np.zeros((num_units, num_samples, recording.get_num_channels()))
         template_stds = np.zeros((num_units, num_samples, recording.get_num_channels()))
