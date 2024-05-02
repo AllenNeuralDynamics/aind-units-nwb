@@ -163,6 +163,8 @@ if __name__ == "__main__":
                         record_node, oe_stream_name = stream_name.split("#")
                         recording_folder = open_ephys_folder / record_node
                         recording = si.split_recording(recording)[segment_index]
+                        # set times as np.array to speed up spike train retrieval later
+                        recording.set_times(np.array(recording.get_times()))
 
                         # Add device and electrode group
                         if devices:
