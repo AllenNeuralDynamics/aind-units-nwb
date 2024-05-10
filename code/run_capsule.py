@@ -230,6 +230,10 @@ if __name__ == "__main__":
                         # Add 'amplitude' property
                         amplitudes = np.round(list(si.get_template_extremum_amplitude(we).values()), 2)
                         sorting_curated.set_property("amplitude", amplitudes)
+
+                        # Add depth property
+                        unit_locations = np.round(we.load_extension("unit_locations").get_data(), 2)
+                        sorting_curated.set_property("depth", unit_locations[:, 1])
                         print(f"\tAdding {len(sorting_curated.unit_ids)} units from stream {stream_name}")
 
                         # Register recording for precise timestamps
