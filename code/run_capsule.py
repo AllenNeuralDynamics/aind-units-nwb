@@ -233,6 +233,10 @@ if __name__ == "__main__":
 
                         # Add depth property
                         unit_locations = np.round(we.load_extension("unit_locations").get_data(), 2)
+                        sorting_curated.set_property("estimated_x", unit_locations[:, 0])
+                        sorting_curated.set_property("estimated_y", unit_locations[:, 1])
+                        if unit_locations.shape[1] == 3:
+                            sorting_curated.set_property("estimated_z", unit_locations[:, 2])
                         sorting_curated.set_property("depth", unit_locations[:, 1])
                         print(f"\tAdding {len(sorting_curated.unit_ids)} units from stream {stream_name}")
 
