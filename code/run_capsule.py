@@ -17,7 +17,7 @@ from pynwb import NWBHDF5IO
 from pynwb.file import Device
 from hdmf_zarr import NWBZarrIO
 
-from utils import get_devices_from_metadata, add_waveforms_with_uneven_channels
+from utils import get_devices_from_rig_metadata, add_waveforms_with_uneven_channels
 
 
 data_folder = Path("../data")
@@ -59,14 +59,17 @@ if __name__ == "__main__":
     ]
     assert len(ecephys_folders) == 1, "Attach one ecephys folder at a time"
     ecephys_folder = ecephys_folders[0]
-    ecephys_compressed_folder = ecephys_folder / "ecephys_compressed"
-    ecephys_clipped_folder = ecephys_folder / "ecephys_clipped"
-    if ecephys_compressed_folder.is_dir():
-        compressed = True
-        open_ephys_folder = ecephys_clipped_folder
-    else:
-        compressed = False
-        open_ephys_folder = ecephys_folder / "ecephys"
+
+    # find raw data
+    job_json_files = [
+        p for p in data_folder.iterdir() if p.suffix == ".json" and "job" in p.name
+    ]
+    job_dicts = []
+    for job_json_file in job_json_files:
+        with open(job_json_file) as f:
+            job_dict = json.load(f)
+        job_dicts.append(job_dict)
+    print(f"Found {len(job_dicts)} JSON job files")
 
     # find sorted data
     sorted_folders = [
@@ -100,75 +103,74 @@ if __name__ == "__main__":
         # we create a result NWB file for each experiment/recording
         recording_names = [p.name for p in curated_folder.iterdir() if p.is_dir()]
 
-        # find experiment and recording ids
-        experiment_ids = []
+        # find blocks and recordings
+        block_ids = []
         recording_ids = []
         stream_names = []
         for recording_name in recording_names:
-            experiment_str = recording_name.split("_")[0]
+            block_str = recording_name.split("_")[0]
             recording_str = recording_name.split("_")[-1]
             stream_name = "_".join(recording_name.split("_")[1:-1])
-            experiment_id = int(experiment_str[len("experiment") :])
-            recording_id = int(recording_str[len("recording") :])
-            if experiment_id not in experiment_ids:
-                experiment_ids.append(experiment_id)
-            if recording_id not in recording_ids:
-                recording_ids.append(recording_id)
+
+            if block_str not in block_ids:
+                block_ids.append(block_str)
+            if recording_str not in recording_ids:
+                recording_ids.append(recording_str)
             if stream_name not in stream_names:
                 stream_names.append(stream_name)
 
         nwb_output_files = []
-        for block_index, experiment_id in enumerate(experiment_ids):
-            for segment_index, recording_id in enumerate(recording_ids):
+        for block_index, block_str in enumerate(block_ids):
+            for segment_index, recording_str in enumerate(recording_ids):
                 # add recording/experiment id if needed
                 nwb_original_file_name = nwbfile_input_path.stem
-                if "experiment" in nwb_original_file_name and "recording" in nwb_original_file_name:
+                if block_str in nwb_original_file_name and recording_str in nwb_original_file_name:
                     nwb_file_name = f"{nwb_original_file_name}.nwb"
                 else:
-                    nwb_file_name = (
-                        f"{nwb_original_file_name}_experiment{experiment_id}_recording{recording_id}.nwb"
-                    )
+                nwb_file_name = (
+                    f"{nwb_original_file_name}_{block_str}_{recording_str}.nwb"
+                )
                 nwbfile_output_path = output_folder / nwb_file_name
 
-                # Find probe devices
-                devices, target_locations = get_devices_from_metadata(ecephys_folder, segment_index=segment_index)
+                # Find probe devices (this will only work for AIND)
+                devices_from_rig, target_locations = get_devices_from_rig_metadata(
+                    ecephys_folder,
+                    segment_index=segment_index
+                )
 
                 with io_class(str(nwbfile_input_path), "r") as read_io:
                     nwbfile = read_io.read()
 
                     added_stream_names = []
                     for stream_name in stream_names:
-                        recording_name = f"experiment{experiment_id}_{stream_name}_recording{recording_id}"
+                        recording_name = f"{block_str}_{stream_name}_{recording_str}"
                         if not (curated_folder / recording_name).is_dir():
                             print(
-                                f"Curated units for stream {stream_name} for experiment "
-                                f"{experiment_id} and recording {recording_id} not found."
+                                f"Curated units for stream {stream_name} for "
+                                f"{block_str} and {recording_str} not found."
                             )
                             continue
 
                         added_stream_names.append(stream_name)
 
-                        # Read Zarr recording
-                        if not compressed:
-                            recording = se.read_openephys(
-                                ecephys_folder,
-                                stream_name=stream_name,
-                                block_index=block_index,
-                                load_sync_timestamps=True
-                            )
-                        else:
-                            recording = si.read_zarr(ecephys_compressed_folder / f"experiment{experiment_id}_{stream_name}.zarr")
+                        # load JSON and recordings
+                        for job_dict in job_dicts:
+                            if job_dict["recording_name"] == recording_name:
+                                break
+
+                        recording = si.load_extractor(job_dict["recording_dict"], base_folder=data_folder)
+                        # set times as np.array to speed up spike train retrieval later
+                        recording.set_times(np.array(recording.get_times()))
 
                         # Load synchronized timestamps and attach to recording
                         record_node, oe_stream_name = stream_name.split("#")
                         recording_folder = open_ephys_folder / record_node
-                        recording = si.split_recording(recording)[segment_index]
                         # set times as np.array to speed up spike train retrieval later
                         recording.set_times(np.array(recording.get_times()))
 
                         # Add device and electrode group
-                        if devices:
-                            for device_name, device in devices.items():
+                        if devices_from_rig:
+                            for device_name, device in devices_from_rig.items():
                                 probe_no_spaces = device_name.replace(" ", "")
                                 if probe_no_spaces in oe_stream_name:
                                     if device_name not in nwbfile.devices:
@@ -181,24 +183,38 @@ if __name__ == "__main__":
                                     print(f"Found device from rig: {probe_device_name}")
                                     break
                         else:
-                            # if devices not found in metadata, instantiate using probeinterface
+                            # if devices_from_rig not found in metadata, use probes_info from recording
                             electrode_group_location = "unknown"
-                            if experiment_id == 1:
-                                settings_file = recording_folder / "settings.xml"
+                            probes_info = recording.get_annotation("probes_info", None)
+                            if probes_info is not None and len(probes_info) == 1:
+                                probe_info = probes_info[0]
+                                probe_device_name = probe_info.get("name", None)
+                                probe_device_manufacturer = probe_info.get("manufacturer", None)
+                                probe_model_name = probe_info.get("model_name", None)
+                                probe_serial_number = probe_info.get("serial_number", None)
+                                probe_device_description = ""
+                                if probe_model_name is not None:
+                                    probe_device_description += f"Model: {probe_device_description}"
+                                if probe_serial_number is not None:
+                                    if len(probe_device_description) > 0:
+                                        probe_device_description += " - "
+                                    probe_device_description += f"Serial number: {probe_serial_number}"
+                                probe_device = Device(
+                                    name=probe_device_name,
+                                    description=probe_device_description,
+                                    manufacturer=probe_device_manufacturer,
+                                )
                             else:
-                                settings_file = recording_folder / f"settings_{experiment_id}.xml"
-                            probe = pi.read_openephys(settings_file, stream_name=oe_stream_name)
-                            probe_device_name = probe.name
-                            probe_device_description = f"Model: {probe.model_name} - Serial number: {probe.serial_number}"
-                            probe_device_manufacturer = f"{probe.manufacturer}"
-                            probe_device = Device(
-                                name=probe_device_name,
-                                description=probe_device_description,
-                                manufacturer=probe_device_manufacturer,
-                            )
-                            if probe_device_name not in nwbfile.devices:
-                                nwbfile.add_device(probe_device)
-                                print(f"\tAdded probe device: {probe_device.name} from probeinterface")
+                                print("\tCould not load device information: using default Device")
+                                probe_device_name = "Device"
+                                probe_device = Device(
+                                    name=probe_device_name,
+                                    description="Default device"
+                                )
+
+                        if probe_device_name not in nwbfile.devices:
+                            nwbfile.add_device(probe_device)
+                            print(f"\tAdded probe device: {probe_device.name} from probeinterface")
 
                         electrode_metadata = dict(
                             Ecephys=dict(

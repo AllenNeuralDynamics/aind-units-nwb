@@ -11,7 +11,7 @@ import pynwb
 from pynwb.file import Device
 
 
-def get_devices_from_metadata(session_folder: str, segment_index: int=0):
+def get_devices_from_rig_metadata(session_folder: str, segment_index: int=0):
     """
     Return NWB devices from metadata target locations.
 
