@@ -106,11 +106,19 @@ if __name__ == "__main__":
         # find blocks and recordings
         block_ids = []
         recording_ids = []
+        group_ids = []
         stream_names = []
         for recording_name in recording_names:
-            block_str = recording_name.split("_")[0]
-            recording_str = recording_name.split("_")[-1]
-            stream_name = "_".join(recording_name.split("_")[1:-1])
+            if "group" in recording_name:
+                block_str = recording_name.split("_")[0]
+                recording_str = recording_name.split("_")[-2]
+                group_str = recording_name.split("_")[-1]
+                stream_name = "_".join(recording_name.split("_")[1:-2])
+            else:
+                block_str = recording_name.split("_")[0]
+                recording_str = recording_name.split("_")[-1]
+                stream_name = "_".join(recording_name.split("_")[1:-1])
+                group_str = None
 
             if block_str not in block_ids:
                 block_ids.append(block_str)
@@ -118,6 +126,10 @@ if __name__ == "__main__":
                 recording_ids.append(recording_str)
             if stream_name not in stream_names:
                 stream_names.append(stream_name)
+            if group_str is not None and group_str not in group_ids:
+                group_ids.append(group_str)
+        if len(group_ids) == 0:
+            group_ids = [""]
 
         nwb_output_files = []
         for block_index, block_str in enumerate(block_ids):
@@ -143,146 +155,148 @@ if __name__ == "__main__":
 
                     added_stream_names = []
                     for stream_name in stream_names:
-                        recording_name = f"{block_str}_{stream_name}_{recording_str}"
-                        if not (curated_folder / recording_name).is_dir():
-                            print(
-                                f"Curated units for stream {stream_name} for "
-                                f"{block_str} and {recording_str} not found."
-                            )
-                            continue
+                        stream_str = str(stream_name)
+                        for group_str in group_ids:
+                            recording_name = f"{block_str}_{stream_name}_{recording_str}"
+                            if group_str != "":
+                                recording_name += f"_{group_str}"
+                                stream_str +=  f"_{group_str}"
+                            if not (curated_folder / recording_name).is_dir():
+                                print(f"Curated units for {recording_name} not found.")
+                                continue
 
-                        # load JSON and recordings
-                        recording_job_dict = None
-                        for job_dict in job_dicts:
-                            if job_dict["recording_name"] == recording_name:
-                                recording_job_dict = job_dict
-                                break
-                        if recording_job_dict is None:
-                            print(f"Could not find JSON file associated to {recording_name}")
-                            continue
-
-                        added_stream_names.append(stream_name)
-
-                        recording = si.load_extractor(job_dict["recording_dict"], base_folder=data_folder)
-                        # set times as np.array to speed up spike train retrieval later
-                        recording.set_times(np.array(recording.get_times()))
-
-                        # Load synchronized timestamps and attach to recording
-                        record_node, oe_stream_name = stream_name.split("#")
-                        recording_folder = open_ephys_folder / record_node
-                        # set times as np.array to speed up spike train retrieval later
-                        recording.set_times(np.array(recording.get_times()))
-
-                        # Add device and electrode group
-                        if devices_from_rig:
-                            for device_name, device in devices_from_rig.items():
-                                probe_no_spaces = device_name.replace(" ", "")
-                                if probe_no_spaces in oe_stream_name:
-                                    if device_name not in nwbfile.devices:
-                                        nwbfile.add_device(devices[device_name])
-                                    probe_device_name = probe_no_spaces
-                                    if device_name in target_locations:
-                                        electrode_group_location = target_locations[device_name]
-                                    else:
-                                        electrode_group_location = "unknown"
-                                    print(f"Found device from rig: {probe_device_name}")
+                            # load JSON and recordings
+                            recording_job_dict = None
+                            for job_dict in job_dicts:
+                                if job_dict["recording_name"] == recording_name:
+                                    recording_job_dict = job_dict
                                     break
-                        else:
-                            # if devices_from_rig not found in metadata, use probes_info from recording
-                            electrode_group_location = "unknown"
-                            probes_info = recording.get_annotation("probes_info", None)
-                            if probes_info is not None and len(probes_info) == 1:
-                                probe_info = probes_info[0]
-                                probe_device_name = probe_info.get("name", None)
-                                probe_device_manufacturer = probe_info.get("manufacturer", None)
-                                probe_model_name = probe_info.get("model_name", None)
-                                probe_serial_number = probe_info.get("serial_number", None)
-                                probe_device_description = ""
-                                if probe_model_name is not None:
-                                    probe_device_description += f"Model: {probe_device_description}"
-                                if probe_serial_number is not None:
-                                    if len(probe_device_description) > 0:
-                                        probe_device_description += " - "
-                                    probe_device_description += f"Serial number: {probe_serial_number}"
-                                probe_device = Device(
-                                    name=probe_device_name,
-                                    description=probe_device_description,
-                                    manufacturer=probe_device_manufacturer,
-                                )
+                            if recording_job_dict is None:
+                                print(f"Could not find JSON file associated to {recording_name}")
+                                continue
+
+                            added_stream_names.append(stream_str)
+
+                            recording = si.load_extractor(job_dict["recording_dict"], base_folder=data_folder)
+                            # set times as np.array to speed up spike train retrieval later
+                            recording.set_times(np.array(recording.get_times()))
+
+                            # Load synchronized timestamps and attach to recording
+                            record_node, oe_stream_name = stream_name.split("#")
+                            recording_folder = open_ephys_folder / record_node
+                            # set times as np.array to speed up spike train retrieval later
+                            recording.set_times(np.array(recording.get_times()))
+
+                            # Add device and electrode group
+                            if devices_from_rig:
+                                for device_name, device in devices_from_rig.items():
+                                    probe_no_spaces = device_name.replace(" ", "")
+                                    if probe_no_spaces in oe_stream_name:
+                                        if device_name not in nwbfile.devices:
+                                            nwbfile.add_device(devices[device_name])
+                                        probe_device_name = probe_no_spaces
+                                        if device_name in target_locations:
+                                            electrode_group_location = target_locations[device_name]
+                                        else:
+                                            electrode_group_location = "unknown"
+                                        print(f"Found device from rig: {probe_device_name}")
+                                        break
                             else:
-                                print("\tCould not load device information: using default Device")
-                                probe_device_name = "Device"
-                                probe_device = Device(
-                                    name=probe_device_name,
-                                    description="Default device"
-                                )
-
-                        if probe_device_name not in nwbfile.devices:
-                            nwbfile.add_device(probe_device)
-                            print(f"\tAdded probe device: {probe_device.name} from probeinterface")
-
-                        electrode_metadata = dict(
-                            Ecephys=dict(
-                                Device=[dict(name=probe_device_name)],
-                                ElectrodeGroup=[
-                                    dict(
+                                # if devices_from_rig not found in metadata, use probes_info from recording
+                                electrode_group_location = "unknown"
+                                probes_info = recording.get_annotation("probes_info", None)
+                                if probes_info is not None and len(probes_info) == 1:
+                                    probe_info = probes_info[0]
+                                    probe_device_name = probe_info.get("name", None)
+                                    probe_device_manufacturer = probe_info.get("manufacturer", None)
+                                    probe_model_name = probe_info.get("model_name", None)
+                                    probe_serial_number = probe_info.get("serial_number", None)
+                                    probe_device_description = ""
+                                    if probe_model_name is not None:
+                                        probe_device_description += f"Model: {probe_device_description}"
+                                    if probe_serial_number is not None:
+                                        if len(probe_device_description) > 0:
+                                            probe_device_description += " - "
+                                        probe_device_description += f"Serial number: {probe_serial_number}"
+                                    probe_device = Device(
                                         name=probe_device_name,
-                                        description=f"Recorded electrodes from probe {probe_device_name}",
-                                        location=electrode_group_location,
-                                        device=probe_device_name,
+                                        description=probe_device_description,
+                                        manufacturer=probe_device_manufacturer,
                                     )
-                                ],
+                                else:
+                                    print("\tCould not load device information: using default Device")
+                                    probe_device_name = "Device"
+                                    probe_device = Device(
+                                        name=probe_device_name,
+                                        description="Default device"
+                                    )
+
+                            if probe_device_name not in nwbfile.devices:
+                                nwbfile.add_device(probe_device)
+                                print(f"\tAdded probe device: {probe_device.name} from probeinterface")
+
+                            electrode_metadata = dict(
+                                Ecephys=dict(
+                                    Device=[dict(name=probe_device_name)],
+                                    ElectrodeGroup=[
+                                        dict(
+                                            name=probe_device_name,
+                                            description=f"Recorded electrodes from probe {probe_device_name}",
+                                            location=electrode_group_location,
+                                            device=probe_device_name,
+                                        )
+                                    ],
+                                )
                             )
-                        )
 
-                        we = si.load_waveforms(
-                            postprocessed_folder / recording_name, with_recording=False
-                        )
+                            we = si.load_waveforms(
+                                postprocessed_folder / recording_name, with_recording=False
+                            )
 
-                        # Load curated sorting and set properties
-                        sorting_curated = si.load_extractor(curated_folder / recording_name)
+                            # Load curated sorting and set properties
+                            sorting_curated = si.load_extractor(curated_folder / recording_name)
 
-                        # Add unit properties (UUID and probe info, ks_unit_id)
-                        unit_uuids = [str(uuid4()) for u in sorting_curated.unit_ids]
-                        sorting_curated.set_property("device_name", [probe_device_name] * sorting_curated.get_num_units())
-                        sorting_curated.set_property("unit_name", unit_uuids)
-                        sorting_curated.set_property("ks_unit_id", sorting_curated.unit_ids)
+                            # Add unit properties (UUID and probe info, ks_unit_id)
+                            unit_uuids = [str(uuid4()) for u in sorting_curated.unit_ids]
+                            sorting_curated.set_property("device_name", [probe_device_name] * sorting_curated.get_num_units())
+                            sorting_curated.set_property("unit_name", unit_uuids)
+                            sorting_curated.set_property("ks_unit_id", sorting_curated.unit_ids)
 
-                        # Add 'amplitude' property
-                        amplitudes = np.round(list(si.get_template_extremum_amplitude(we).values()), 2)
-                        sorting_curated.set_property("amplitude", amplitudes)
+                            # Add 'amplitude' property
+                            amplitudes = np.round(list(si.get_template_extremum_amplitude(we).values()), 2)
+                            sorting_curated.set_property("amplitude", amplitudes)
 
-                        # Add depth property
-                        unit_locations = np.round(we.load_extension("unit_locations").get_data(), 2)
-                        sorting_curated.set_property("estimated_x", unit_locations[:, 0])
-                        sorting_curated.set_property("estimated_y", unit_locations[:, 1])
-                        if unit_locations.shape[1] == 3:
-                            sorting_curated.set_property("estimated_z", unit_locations[:, 2])
-                        sorting_curated.set_property("depth", unit_locations[:, 1])
-                        print(f"\tAdding {len(sorting_curated.unit_ids)} units from stream {stream_name}")
+                            # Add depth property
+                            unit_locations = np.round(we.load_extension("unit_locations").get_data(), 2)
+                            sorting_curated.set_property("estimated_x", unit_locations[:, 0])
+                            sorting_curated.set_property("estimated_y", unit_locations[:, 1])
+                            if unit_locations.shape[1] == 3:
+                                sorting_curated.set_property("estimated_z", unit_locations[:, 2])
+                            sorting_curated.set_property("depth", unit_locations[:, 1])
+                            print(f"\tAdding {len(sorting_curated.unit_ids)} units from stream {stream_name}")
 
-                        # Register recording for precise timestamps
-                        sorting_curated.register_recording(recording)
-                        we.sorting = sorting_curated
+                            # Register recording for precise timestamps
+                            sorting_curated.register_recording(recording)
+                            we.sorting = sorting_curated
 
-                        # Retrieve sorter name
-                        sorter_log_file = spikesorted_folder / recording_name / "spikeinterface_log.json"
-                        units_description = "Units"
-                        if sorter_log_file.is_file():
-                            with open(sorter_log_file, "r") as f:
-                                sorter_log = json.load(f)
-                                sorter_name = sorter_log["sorter_name"]
-                                units_description += f" from {sorter_name.capitalize()}"
-                        # set channel groups to match previously added ephys electrodes
-                        recording.set_channel_groups([probe_device_name] * recording.get_num_channels())
-                        add_waveforms_with_uneven_channels(
-                            waveform_extractor=we,
-                            recording=recording,
-                            nwbfile=nwbfile,
-                            metadata=electrode_metadata,
-                            skip_properties=skip_unit_properties,
-                            units_description=units_description,
-                        )
+                            # Retrieve sorter name
+                            sorter_log_file = spikesorted_folder / recording_name / "spikeinterface_log.json"
+                            units_description = "Units"
+                            if sorter_log_file.is_file():
+                                with open(sorter_log_file, "r") as f:
+                                    sorter_log = json.load(f)
+                                    sorter_name = sorter_log["sorter_name"]
+                                    units_description += f" from {sorter_name.capitalize()}"
+                            # set channel groups to match previously added ephys electrodes
+                            recording.set_channel_groups([probe_device_name] * recording.get_num_channels())
+                            add_waveforms_with_uneven_channels(
+                                waveform_extractor=we,
+                                recording=recording,
+                                nwbfile=nwbfile,
+                                metadata=electrode_metadata,
+                                skip_properties=skip_unit_properties,
+                                units_description=units_description,
+                            )
 
                     print(f"Added {len(added_stream_names)} streams")
 
