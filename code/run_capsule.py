@@ -127,9 +127,9 @@ if __name__ == "__main__":
                 if block_str in nwb_original_file_name and recording_str in nwb_original_file_name:
                     nwb_file_name = f"{nwb_original_file_name}.nwb"
                 else:
-                nwb_file_name = (
-                    f"{nwb_original_file_name}_{block_str}_{recording_str}.nwb"
-                )
+                    nwb_file_name = (
+                        f"{nwb_original_file_name}_{block_str}_{recording_str}.nwb"
+                    )
                 nwbfile_output_path = output_folder / nwb_file_name
 
                 # Find probe devices (this will only work for AIND)
