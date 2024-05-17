@@ -151,12 +151,17 @@ if __name__ == "__main__":
                             )
                             continue
 
-                        added_stream_names.append(stream_name)
-
                         # load JSON and recordings
+                        recording_job_dict = None
                         for job_dict in job_dicts:
                             if job_dict["recording_name"] == recording_name:
+                                recording_job_dict = job_dict
                                 break
+                        if recording_job_dict is None:
+                            print(f"Could not find JSON file associated to {recording_name}")
+                            continue
+
+                        added_stream_names.append(stream_name)
 
                         recording = si.load_extractor(job_dict["recording_dict"], base_folder=data_folder)
                         # set times as np.array to speed up spike train retrieval later
