@@ -181,9 +181,6 @@ if __name__ == "__main__":
                             # set times as np.array to speed up spike train retrieval later
                             recording.set_times(np.array(recording.get_times()))
 
-                            # set times as np.array to speed up spike train retrieval later
-                            recording.set_times(np.array(recording.get_times()))
-
                             # Add device and electrode group
                             if devices_from_rig:
                                 for device_name, device in devices_from_rig.items():
