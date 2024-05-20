@@ -181,9 +181,6 @@ if __name__ == "__main__":
                             # set times as np.array to speed up spike train retrieval later
                             recording.set_times(np.array(recording.get_times()))
 
-                            # Load synchronized timestamps and attach to recording
-                            record_node, oe_stream_name = stream_name.split("#")
-                            recording_folder = open_ephys_folder / record_node
                             # set times as np.array to speed up spike train retrieval later
                             recording.set_times(np.array(recording.get_times()))
 
@@ -191,7 +188,7 @@ if __name__ == "__main__":
                             if devices_from_rig:
                                 for device_name, device in devices_from_rig.items():
                                     probe_no_spaces = device_name.replace(" ", "")
-                                    if probe_no_spaces in oe_stream_name:
+                                    if probe_no_spaces in stream_name:
                                         if device_name not in nwbfile.devices:
                                             nwbfile.add_device(devices[device_name])
                                         probe_device_name = probe_no_spaces
