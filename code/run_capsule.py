@@ -206,6 +206,11 @@ if __name__ == "__main__":
                                     probe_model_name = probe_info.get("model_name", None)
                                     probe_serial_number = probe_info.get("serial_number", None)
                                     probe_device_description = ""
+                                    if probe_device_name is None:
+                                        if probe_model_name is not None:
+                                            probe_device_name = probe_model_name
+                                        else:
+                                            probe_device_name = "Probe"
                                     if probe_model_name is not None:
                                         probe_device_description += f"Model: {probe_device_description}"
                                     if probe_serial_number is not None:
