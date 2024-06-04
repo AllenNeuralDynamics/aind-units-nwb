@@ -269,7 +269,7 @@ if __name__ == "__main__":
                             amplitudes = np.round(list(si.get_template_extremum_amplitude(analyzer).values()), 2)
                             sorting_curated.set_property("amplitude", amplitudes)
                             # Add depth property
-                            unit_locations = np.round(analyzer.get_channel_locations_extension("unit_locations").get_data(), 2)
+                            unit_locations = np.round(analyzer.get_extension("unit_locations").get_data(), 2)
                             sorting_curated.set_property("estimated_x", unit_locations[:, 0])
                             sorting_curated.set_property("estimated_y", unit_locations[:, 1])
                             if unit_locations.shape[1] == 3:
