@@ -206,7 +206,6 @@ def add_waveforms_with_uneven_channels(
         write_in_processing_module=write_in_processing_module,
         units_table_name=units_name,
         unit_table_description=units_description,
-        write_waveforms=False,
         waveform_means=template_means,
         waveform_sds=template_stds,
         unit_electrode_indices=unit_electrode_indices,
