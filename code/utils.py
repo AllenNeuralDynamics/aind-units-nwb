@@ -88,15 +88,20 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
             devices = {}
             devices_target_location = {}
             laser_devices = {}
-            for ephys_module in ephys_modules:
+            same_ephys_modules_and_assemblies = len(ephys_modules) == len(ephys_assemblies)
+            for i, ephys_module in enumerate(ephys_modules):
                 assembly_name = ephys_module["assembly_name"]
                 ephys_assemblies_by_name = [
                     assembly for assembly in ephys_assemblies if assembly["name"] == assembly_name
                 ]
-                if len(ephys_assemblies_by_name) == 0:
-                    warnings.warn(f"Assembly {assembly_name} not found in rig.json")
+                if len(ephys_assemblies_by_name) == 1:
+                    ephys_assembly = ephys_assemblies_by_name[0]
+                elif same_ephys_modules_and_assemblies:
+                    ephys_assembly = ephys_assemblies[i]
+                else:
+                    warnings.warn(f"Could not find probe associated to {assembly_name} in rig.json")
                     continue
-                ephys_assembly = ephys_assemblies_by_name[0]
+
                 probes_in_assembly = ephys_assembly["probes"]
 
                 for probe_info in probes_in_assembly:
