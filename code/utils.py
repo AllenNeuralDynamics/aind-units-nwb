@@ -84,24 +84,10 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
             ephys_assemblies = rig.get("ephys_assemblies", [])
             laser_assemblies = rig.get("laser_assemblies", [])
 
-            # Get probes from session
-            devices = {}
-            devices_target_location = {}
+            # gather all probes and lasers
+            probe_devices = {}
             laser_devices = {}
-            same_ephys_modules_and_assemblies = len(ephys_modules) == len(ephys_assemblies)
-            for i, ephys_module in enumerate(ephys_modules):
-                assembly_name = ephys_module["assembly_name"]
-                ephys_assemblies_by_name = [
-                    assembly for assembly in ephys_assemblies if assembly["name"] == assembly_name
-                ]
-                if len(ephys_assemblies_by_name) == 1:
-                    ephys_assembly = ephys_assemblies_by_name[0]
-                elif same_ephys_modules_and_assemblies:
-                    ephys_assembly = ephys_assemblies[i]
-                else:
-                    warnings.warn(f"Could not find probe associated to {assembly_name} in rig.json")
-                    continue
-
+            for ephys_assembly in ephys_assemblies:
                 probes_in_assembly = ephys_assembly["probes"]
 
                 for probe_info in probes_in_assembly:
@@ -126,10 +112,8 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
                         description=probe_device_description,
                         manufacturer=probe_device_manufacturer,
                     )
-                    if probe_device_name not in devices:
-                        devices[probe_device_name] = probe_device
-                        devices_target_location[probe_device_name] = ephys_module["primary_targeted_structure"]
-
+                    if probe_device_name not in probe_devices:
+                        probe_devices[probe_device_name] = probe_device
                     # Add internal lasers for NP-opto
                     if "lasers" in probe_info and len(probe_info["lasers"]) > 1:
                         for laser in probe_info["lasers"]:
@@ -159,10 +143,19 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
                     if laser_device_name not in laser_devices:
                         laser_devices[laser_device_name] = external_laser_device
 
-            # only add used lasers
+            # get probes and lasers used in the session
+            devices = {}
+            devices_target_location = {}
+            for ephys_module in ephys_modules:
+                assembly_name = ephys_module["assembly_name"]
+
+                for probe_name, probe_device in probe_devices.items():
+                    if probe_name in assembly_name and probe_name not in devices:
+                        devices[probe_name] = probe_device
+                        devices_target_location[probe_name] = ephys_module["primary_targeted_structure"]
             if len(stimulus_device_names) > 0:
                 for stimulus_device_name in stimulus_device_names:
-                    if stimulus_device_name in laser_devices:
+                    if stimulus_device_name in laser_devices and stimulus_device_name not in devices:
                         devices[stimulus_device_name] = laser_devices[stimulus_device_name]
         else:
             warnings.warn(f"v{rig_schema_version} for rig schema is not currently supported")
