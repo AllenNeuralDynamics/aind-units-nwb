@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import probeinterface as pi
 import spikeinterface as si
+
 # needed to lead extensions
 import spikeinterface.postprocessing as spost
 import spikeinterface.qualitymetrics as sqm
@@ -34,9 +35,9 @@ skip_unit_properties = [
 if __name__ == "__main__":
     # find base NWB file
     nwb_files = [
-        p for p in data_folder.glob("**/*") 
-        if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr"))
-        and ("ecephys_" in p.name or "behavior_" in p.name)
+        p
+        for p in data_folder.glob("**/*")
+        if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")) and ("ecephys_" in p.name or "behavior_" in p.name)
     ]
     assert len(nwb_files) == 1, "Attach one base NWB file data at a time"
     nwbfile_input_path = nwb_files[0]
@@ -54,15 +55,15 @@ if __name__ == "__main__":
     ecephys_folders = [
         p
         for p in data_folder.iterdir()
-        if p.is_dir() and ("ecephys" in p.name or "behavior" in p.name) and ("sorted" not in p.name and "nwb" not in p.name)
+        if p.is_dir()
+        and ("ecephys" in p.name or "behavior" in p.name)
+        and ("sorted" not in p.name and "nwb" not in p.name)
     ]
     assert len(ecephys_folders) == 1, "Attach one ecephys folder at a time"
     ecephys_folder = ecephys_folders[0]
 
     # find raw data
-    job_json_files = [
-        p for p in data_folder.iterdir() if p.suffix == ".json" and "job" in p.name
-    ]
+    job_json_files = [p for p in data_folder.iterdir() if p.suffix == ".json" and "job" in p.name]
     job_dicts = []
     for job_json_file in job_json_files:
         with open(job_json_file) as f:
@@ -92,9 +93,7 @@ if __name__ == "__main__":
         print("Postprocessed folder not found. Skipping NWB export")
         # create dummy nwb folder to avoid pipeline failure
         error_txt = output_folder / "error.txt"
-        error_txt.write_text(
-            "Postprocessed folder not found. No NWB files were created."
-        )
+        error_txt.write_text("Postprocessed folder not found. No NWB files were created.")
     else:
         assert curated_folder.is_dir(), f"Curated folder {curated_folder} does not exist"
         assert spikesorted_folder.is_dir(), f"Spikesorted folder {spikesorted_folder} does not exist"
@@ -138,15 +137,12 @@ if __name__ == "__main__":
                 if block_str in nwb_original_file_name and recording_str in nwb_original_file_name:
                     nwb_file_name = f"{nwb_original_file_name}.nwb"
                 else:
-                    nwb_file_name = (
-                        f"{nwb_original_file_name}_{block_str}_{recording_str}.nwb"
-                    )
+                    nwb_file_name = f"{nwb_original_file_name}_{block_str}_{recording_str}.nwb"
                 nwbfile_output_path = output_folder / nwb_file_name
 
                 # Find probe devices (this will only work for AIND)
                 devices_from_rig, target_locations = get_devices_from_rig_metadata(
-                    ecephys_folder,
-                    segment_index=segment_index
+                    ecephys_folder, segment_index=segment_index
                 )
 
                 with io_class(str(nwbfile_input_path), "r") as read_io:
@@ -159,7 +155,7 @@ if __name__ == "__main__":
                             recording_name = f"{block_str}_{stream_name}_{recording_str}"
                             if group_str != "":
                                 recording_name += f"_{group_str}"
-                                stream_str +=  f"_{group_str}"
+                                stream_str += f"_{group_str}"
                             if not (curated_folder / recording_name).is_dir():
                                 print(f"Curated units for {recording_name} not found.")
                                 continue
@@ -181,20 +177,24 @@ if __name__ == "__main__":
                             recording.set_times(np.array(recording.get_times()))
 
                             # Add device and electrode group
+                            probe_device_name = None
                             if devices_from_rig:
                                 for device_name, device in devices_from_rig.items():
+                                    # add the device, since it could be a laser
+                                    if device_name not in nwbfile.devices:
+                                        nwbfile.add_device(devices_from_rig[device_name])
+                                    # find probe device name
                                     probe_no_spaces = device_name.replace(" ", "")
                                     if probe_no_spaces in stream_name:
-                                        if device_name not in nwbfile.devices:
-                                            nwbfile.add_device(devices[device_name])
                                         probe_device_name = probe_no_spaces
-                                        if device_name in target_locations:
-                                            electrode_group_location = target_locations[device_name]
-                                        else:
-                                            electrode_group_location = "unknown"
-                                        print(f"Found device from rig: {probe_device_name}")
+                                        electrode_group_location = target_locations.get(device_name, "unknown")
+                                        print(
+                                            f"Found device from rig: {probe_device_name} at location {electrode_group_location}"
+                                        )
                                         break
-                            else:
+
+                            # if probe_device_name not found in metadata, use probes_info from recording
+                            if probe_device_name is None:
                                 # if devices_from_rig not found in metadata, use probes_info from recording
                                 electrode_group_location = "unknown"
                                 probes_info = recording.get_annotation("probes_info", None)
@@ -224,10 +224,7 @@ if __name__ == "__main__":
                                 else:
                                     print("\tCould not load device information: using default Device")
                                     probe_device_name = "Device"
-                                    probe_device = Device(
-                                        name=probe_device_name,
-                                        description="Default device"
-                                    )
+                                    probe_device = Device(name=probe_device_name, description="Default device")
 
                             if probe_device_name not in nwbfile.devices:
                                 nwbfile.add_device(probe_device)
@@ -247,16 +244,16 @@ if __name__ == "__main__":
                                 )
                             )
 
-                            we = si.load_waveforms(
-                                postprocessed_folder / recording_name, with_recording=False
-                            )
+                            we = si.load_waveforms(postprocessed_folder / recording_name, with_recording=False)
 
                             # Load curated sorting and set properties
                             sorting_curated = si.load_extractor(curated_folder / recording_name)
 
                             # Add unit properties (UUID and probe info, ks_unit_id)
                             unit_uuids = [str(uuid4()) for u in sorting_curated.unit_ids]
-                            sorting_curated.set_property("device_name", [probe_device_name] * sorting_curated.get_num_units())
+                            sorting_curated.set_property(
+                                "device_name", [probe_device_name] * sorting_curated.get_num_units()
+                            )
                             sorting_curated.set_property("unit_name", unit_uuids)
                             sorting_curated.set_property("ks_unit_id", sorting_curated.unit_ids)
 
