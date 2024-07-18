@@ -56,13 +56,17 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
         if session_schema_version is None:
             warnings.warn(f"Session file does not have schema_version")
             return devices, devices_target_location
-        if parse(session_schema_version) >= parse("0.3.0"):
+        if parse(session_schema_version) >= parse("0.3.0") and parse(
+            session_schema_version
+        ) < parse("0.4.0"):
             data_streams = session.get("data_streams", None)
             if data_streams is None:
                 warnings.warn(f"Session file does not have data_streams")
                 return None, None
         else:
-            warnings.warn(f"v{session_schema_version} for session schema is not currently supported")
+            warnings.warn(
+                f"v{session_schema_version} for session schema is not currently supported"
+            )
             return None, None
     else:
         warnings.warn(f"Session file not found in {session_folder}")
@@ -79,7 +83,9 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
         if rig_schema_version is None:
             warnings.warn(f"Rig file does not have schema_version")
             return None, None
-        if parse(rig_schema_version) >= parse("0.5.1"):
+        if parse(rig_schema_version) >= parse("0.5.0") and parse(
+            rig_schema_version
+        ) < parse("0.6.0"):
             ephys_modules = session["data_streams"][segment_index]["ephys_modules"]
             ephys_assemblies = rig.get("ephys_assemblies", [])
             laser_assemblies = rig.get("laser_assemblies", [])
@@ -106,7 +112,9 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
                     if probe_serial_number is not None:
                         if len(probe_device_description) > 0:
                             probe_device_description += " - "
-                        probe_device_description += f"Serial number: {probe_serial_number}"
+                        probe_device_description += (
+                            f"Serial number: {probe_serial_number}"
+                        )
                     probe_device = Device(
                         name=probe_device_name,
                         description=probe_device_description,
@@ -118,8 +126,8 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
                     if "lasers" in probe_info and len(probe_info["lasers"]) > 1:
                         for laser in probe_info["lasers"]:
                             laser_device_name = laser["name"]
-                            laser_device_description, laser_device_manufacturer = get_laser_description_manufacturer(
-                                laser, "internal"
+                            laser_device_description, laser_device_manufacturer = (
+                                get_laser_description_manufacturer(laser, "internal")
                             )
                             internal_laser_device = Device(
                                 name=laser_device_name,
@@ -132,8 +140,8 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
             for laser_assembly in laser_assemblies:
                 for laser in laser_assembly["lasers"]:
                     laser_device_name = laser["name"]
-                    laser_device_description, laser_device_manufacturer = get_laser_description_manufacturer(
-                        laser, "external"
+                    laser_device_description, laser_device_manufacturer = (
+                        get_laser_description_manufacturer(laser, "external")
                     )
                     external_laser_device = Device(
                         name=laser_device_name,
@@ -152,13 +160,22 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
                 for probe_name, probe_device in probe_devices.items():
                     if probe_name in assembly_name and probe_name not in devices:
                         devices[probe_name] = probe_device
-                        devices_target_location[probe_name] = ephys_module["primary_targeted_structure"]
+                        devices_target_location[probe_name] = ephys_module[
+                            "primary_targeted_structure"
+                        ]
             if len(stimulus_device_names) > 0:
                 for stimulus_device_name in stimulus_device_names:
-                    if stimulus_device_name in laser_devices and stimulus_device_name not in devices:
-                        devices[stimulus_device_name] = laser_devices[stimulus_device_name]
+                    if (
+                        stimulus_device_name in laser_devices
+                        and stimulus_device_name not in devices
+                    ):
+                        devices[stimulus_device_name] = laser_devices[
+                            stimulus_device_name
+                        ]
         else:
-            warnings.warn(f"v{rig_schema_version} for rig schema is not currently supported")
+            warnings.warn(
+                f"v{rig_schema_version} for rig schema is not currently supported"
+            )
     else:
         warnings.warn(f"Rig file not found in {session_folder}")
 
@@ -169,10 +186,14 @@ def get_laser_description_manufacturer(laser, type):
     laser_device_description = f"Type: {type} "
     wavelength = laser.get("wavelength", None)
     if wavelength is not None:
-        laser_device_description += f" - Wavelength: {wavelength} {laser.get('wavelength_unit', 'nanometer')}"
+        laser_device_description += (
+            f" - Wavelength: {wavelength} {laser.get('wavelength_unit', 'nanometer')}"
+        )
     max_power = laser.get("maximum_power", None)
     if max_power is not None:
-        laser_device_description += f" - Max power: {max_power} {laser.get('power_unit', 'milliwatt')}"
+        laser_device_description += (
+            f" - Max power: {max_power} {laser.get('power_unit', 'milliwatt')}"
+        )
     coupling = laser.get("coupling", None)
     if coupling is not None:
         laser_device_description += f" - Coupling: {coupling}"
@@ -212,7 +233,9 @@ def add_waveforms_with_uneven_channels(
         "processing",
     ], f"Argument write_as ({write_as}) should be one of 'units' or 'processing'!"
     if write_as == "units":
-        assert units_name == "units", "When writing to the nwbfile.units table, the name of the table must be 'units'!"
+        assert (
+            units_name == "units"
+        ), "When writing to the nwbfile.units table, the name of the table must be 'units'!"
     write_in_processing_module = False if write_as == "units" else True
 
     num_units = len(waveform_extractor.unit_ids)
@@ -221,7 +244,9 @@ def add_waveforms_with_uneven_channels(
         template_means_partial = waveform_extractor.get_all_templates()
         template_stds_partial = waveform_extractor.get_all_templates(mode="std")
         num_samples = template_means_partial.shape[1]
-        template_means = np.zeros((num_units, num_samples, recording.get_num_channels()))
+        template_means = np.zeros(
+            (num_units, num_samples, recording.get_num_channels())
+        )
         template_stds = np.zeros((num_units, num_samples, recording.get_num_channels()))
         channel_mask = np.isin(recording.channel_ids, waveform_extractor.channel_ids)
         template_means[:, :, channel_mask] = template_means_partial
