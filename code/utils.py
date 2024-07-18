@@ -108,7 +108,7 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
                         else:
                             probe_device_name = "Probe"
                     if probe_model_name is not None:
-                        probe_device_description += f"Model: {probe_device_description}"
+                        probe_device_description += f"Model: {probe_model_name}"
                     if probe_serial_number is not None:
                         if len(probe_device_description) > 0:
                             probe_device_description += " - "
