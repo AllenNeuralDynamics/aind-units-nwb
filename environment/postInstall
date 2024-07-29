@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-pip install --no-cache-dir spikeinterface[full]==0.101.0rc1
-
-
 git clone https://github.com/catalystneuro/neuroconv.git
 cd neuroconv
-git checkout 46c8a5d640f933a86e57a9cb4c2e95d84c135659
+git checkout 7566cb3bcb7cadb84e1a69e4d262056e0d58f742
 pip install --no-cache-dir .
 cd ..

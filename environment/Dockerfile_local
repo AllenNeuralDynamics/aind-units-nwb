@@ -9,14 +9,8 @@ RUN apt-get update \
 
 RUN pip install -U --no-cache-dir \
     hdmf-zarr==0.6.0 \
-    neuroconv==0.4.6 \
+    neuroconv==0.5.1 \
     pynwb==2.6.0 \
     zarr==2.17.2 \
-    spikeinterface[full]==0.100.5 \
+    spikeinterface[full]==0.101.0 \
     wavpack-numcodecs==0.1.5
-
-RUN pip uninstall -y neo && \
-    git clone https://github.com/alejoe91/python-neo.git &&  \
-    cd python-neo && git checkout cf543aa7b85124193a8d1cf726a92de54b360026  && \
-    pip install --no-cache-dir . && \
-    cd ..
