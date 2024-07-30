@@ -21,6 +21,7 @@ from utils import get_devices_from_rig_metadata, add_waveforms_with_uneven_chann
 
 
 data_folder = Path("../data")
+scratch_folder = Path("../scratch")
 results_folder = Path("../results")
 
 # unit properties to skip
@@ -50,6 +51,14 @@ if __name__ == "__main__":
         NWB_BACKEND = "hdf5"
         io_class = NWBHDF5IO
     print(f"NWB backend: {NWB_BACKEND}")
+
+    # copy to scratch to avoid read-only issues
+    nwbfile_sctratch_path = scratch_folder / nwbfile_input_path.name
+    if nwbfile_input_path.is_dir():
+        shutil.copytree(nwbfile_input_path, nwbfile_sctratch_path)
+    else:
+        shutil.copyfile(nwbfile_input_path, nwbfile_sctratch_path)
+    nwbfile_input_path = nwbfile_sctratch_path
 
     # find raw data
     ecephys_folders = [
