@@ -295,7 +295,12 @@ if __name__ == "__main__":
 
                     print(f"Added {len(added_stream_names)} streams")
 
+                    if NWB_BACKEND == "zarr":
+                        write_args = {'link_data': False}
+                    else:
+                        write_args = {}
+
                     with io_class(str(nwbfile_output_path), "w") as export_io:
-                        export_io.export(src_io=read_io, nwbfile=nwbfile)
+                        export_io.export(src_io=read_io, nwbfile=nwbfile, write_args=write_args)
                     print(f"Done writing {nwbfile_output_path}")
                     nwb_output_files.append(nwbfile_output_path)
