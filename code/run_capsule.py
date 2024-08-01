@@ -38,7 +38,7 @@ if __name__ == "__main__":
     nwb_files = [
         p
         for p in data_folder.glob("**/*")
-        if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")) and ("ecephys_" in p.name or "behavior_" in p.name)
+        if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")) and ("ecephys_" in p.name or "behavior_" in p.name) and "/nwb/" not in str(p)
     ]
     assert len(nwb_files) == 1, "Attach one base NWB file data at a time"
     nwbfile_input_path = nwb_files[0]
@@ -66,7 +66,7 @@ if __name__ == "__main__":
         for p in data_folder.iterdir()
         if p.is_dir()
         and ("ecephys" in p.name or "behavior" in p.name)
-        and ("sorted" not in p.name and "nwb" not in p.name)
+        and "sorted" not in p.name and "nwb" not in p.name
     ]
     assert len(ecephys_folders) == 1, "Attach one ecephys folder at a time"
     ecephys_folder = ecephys_folders[0]
@@ -154,7 +154,7 @@ if __name__ == "__main__":
                     ecephys_folder, segment_index=segment_index
                 )
 
-                with io_class(str(nwbfile_input_path), "r") as read_io:
+                with io_class(str(nwbfile_input_path), "a") as read_io:
                     nwbfile = read_io.read()
 
                     added_stream_names = []
@@ -304,7 +304,12 @@ if __name__ == "__main__":
 
                     print(f"Added {len(added_stream_names)} streams")
 
+                    if NWB_BACKEND == "zarr":
+                        write_args = {'link_data': False}
+                    else:
+                        write_args = {}
+
                     with io_class(str(nwbfile_output_path), "w") as export_io:
-                        export_io.export(src_io=read_io, nwbfile=nwbfile)
+                        export_io.export(src_io=read_io, nwbfile=nwbfile, write_args=write_args)
                     print(f"Done writing {nwbfile_output_path}")
                     nwb_output_files.append(nwbfile_output_path)
