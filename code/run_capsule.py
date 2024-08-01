@@ -53,12 +53,12 @@ if __name__ == "__main__":
     print(f"NWB backend: {NWB_BACKEND}")
 
     # copy to scratch to avoid read-only issues
-    nwbfile_sctratch_path = scratch_folder / nwbfile_input_path.name
-    if nwbfile_input_path.is_dir():
-        shutil.copytree(nwbfile_input_path, nwbfile_sctratch_path)
-    else:
-        shutil.copyfile(nwbfile_input_path, nwbfile_sctratch_path)
-    nwbfile_input_path = nwbfile_sctratch_path
+    # nwbfile_sctratch_path = scratch_folder / nwbfile_input_path.name
+    # if nwbfile_input_path.is_dir():
+    #    shutil.copytree(nwbfile_input_path, nwbfile_sctratch_path)
+    # else:
+    #    shutil.copyfile(nwbfile_input_path, nwbfile_sctratch_path)
+    # nwbfile_input_path = nwbfile_sctratch_path
 
     # find raw data
     ecephys_folders = [
@@ -154,7 +154,7 @@ if __name__ == "__main__":
                     ecephys_folder, segment_index=segment_index
                 )
 
-                with io_class(str(nwbfile_input_path), "a") as read_io:
+                with io_class(str(nwbfile_input_path), "r") as read_io:
                     nwbfile = read_io.read()
 
                     added_stream_names = []
