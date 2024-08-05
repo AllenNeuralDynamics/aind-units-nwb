@@ -21,6 +21,7 @@ from utils import get_devices_from_rig_metadata, add_waveforms_with_uneven_chann
 
 
 data_folder = Path("../data")
+scratch_folder = Path("../scratch")
 results_folder = Path("../results")
 
 # unit properties to skip
@@ -37,7 +38,7 @@ if __name__ == "__main__":
     nwb_files = [
         p
         for p in data_folder.glob("**/*")
-        if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")) and ("ecephys_" in p.name or "behavior_" in p.name)
+        if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")) and ("ecephys_" in p.name or "behavior_" in p.name) and "/nwb/" not in str(p)
     ]
     assert len(nwb_files) == 1, "Attach one base NWB file data at a time"
     nwbfile_input_path = nwb_files[0]
@@ -57,7 +58,7 @@ if __name__ == "__main__":
         for p in data_folder.iterdir()
         if p.is_dir()
         and ("ecephys" in p.name or "behavior" in p.name)
-        and ("sorted" not in p.name and "nwb" not in p.name)
+        and "sorted" not in p.name and "nwb" not in p.name
     ]
     assert len(ecephys_folders) == 1, "Attach one ecephys folder at a time"
     ecephys_folder = ecephys_folders[0]
