@@ -141,13 +141,19 @@ if __name__ == "__main__":
                     nwb_file_name = f"{nwb_original_file_name}_{block_str}_{recording_str}.nwb"
                 nwbfile_output_path = output_folder / nwb_file_name
 
+                # copy to results to avoid read-only issues
+                if nwbfile_input_path.is_dir():
+                    shutil.copytree(nwbfile_input_path, nwbfile_output_path)
+                else:
+                    shutil.copyfile(nwbfile_input_path, nwbfile_output_path)
+
                 # Find probe devices (this will only work for AIND)
                 devices_from_rig, target_locations = get_devices_from_rig_metadata(
                     ecephys_folder, segment_index=segment_index
                 )
 
-                with io_class(str(nwbfile_input_path), "r") as read_io:
-                    nwbfile = read_io.read()
+                with io_class(str(nwbfile_output_path), "a") as append_io:
+                    nwbfile = append_io.read()
 
                     added_stream_names = []
                     for stream_name in stream_names:
@@ -301,7 +307,8 @@ if __name__ == "__main__":
                     else:
                         write_args = {}
 
-                    with io_class(str(nwbfile_output_path), "w") as export_io:
-                        export_io.export(src_io=read_io, nwbfile=nwbfile, write_args=write_args)
+                    append_io.write(nwbfile)
+                    # with io_class(str(nwbfile_output_path), "w") as export_io:
+                    #    export_io.export(src_io=read_io, nwbfile=nwbfile, write_args=write_args)
                     print(f"Done writing {nwbfile_output_path}")
                     nwb_output_files.append(nwbfile_output_path)
