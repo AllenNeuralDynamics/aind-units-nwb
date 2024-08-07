@@ -183,14 +183,15 @@ if __name__ == "__main__":
                                 for device_name, device in devices_from_rig.items():
                                     # add the device, since it could be a laser
                                     if device_name not in nwbfile.devices:
-                                        nwbfile.add_device(devices_from_rig[device_name])
+                                        nwbfile.add_device(device)
                                     # find probe device name
                                     probe_no_spaces = device_name.replace(" ", "")
                                     if probe_no_spaces in stream_name:
-                                        probe_device_name = probe_no_spaces
+                                        probe_device_name = device_name
                                         electrode_group_location = target_locations.get(device_name, "unknown")
+                                        probe_device = device
                                         print(
-                                            f"Found device from rig: {probe_device_name} at location {electrode_group_location}"
+                                            f"Found device from rig: {device_name} at location {electrode_group_location}"
                                         )
                                         break
 
@@ -227,9 +228,9 @@ if __name__ == "__main__":
                                     probe_device_name = "Device"
                                     probe_device = Device(name=probe_device_name, description="Default device")
 
-                            if probe_device_name not in nwbfile.devices:
-                                nwbfile.add_device(probe_device)
-                                print(f"\tAdded probe device: {probe_device.name} from probeinterface")
+                                if probe_device_name not in nwbfile.devices:
+                                    nwbfile.add_device(probe_device)
+                                    print(f"\tAdded probe device: {probe_device.name} from probeinterface")
 
                             electrode_metadata = dict(
                                 Ecephys=dict(
