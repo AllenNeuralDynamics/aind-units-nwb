@@ -3,13 +3,6 @@ set -e
 
 git clone https://github.com/catalystneuro/neuroconv.git
 cd neuroconv
-git checkout 7566cb3bcb7cadb84e1a69e4d262056e0d58f742
-pip install --no-cache-dir .
-cd ..
-
-# install hdmf-zarr from main
-git clone https://github.com/hdmf-dev/hdmf-zarr.git
-cd hdmf-zarr
-git checkout 8ca578733db5078d1ff6d2dfb47407a680c58caf
+git checkout 6df86608365ec9d2e7a6b7d0dab8a0f7196fdae7
 pip install --no-cache-dir .
 cd ..
