@@ -84,12 +84,9 @@ if __name__ == "__main__":
             sorted_folder = data_folder / "collect_pipeline_output_test"
         else:
             sorted_folder = data_folder
-        output_folder = results_folder / "nwb"
-        output_folder.mkdir(exist_ok=True)
     elif len(sorted_folders) == 1:
         # capsule mode
         sorted_folder = sorted_folders[0]
-        output_folder = results_folder
 
     postprocessed_folder = sorted_folder / "postprocessed"
     curated_folder = sorted_folder / "curated"
@@ -97,7 +94,7 @@ if __name__ == "__main__":
     if not postprocessed_folder.is_dir():
         print("Postprocessed folder not found. Skipping NWB export")
         # create dummy nwb folder to avoid pipeline failure
-        error_txt = output_folder / "error.txt"
+        error_txt = results_folder / "error.txt"
         error_txt.write_text("Postprocessed folder not found. No NWB files were created.")
     else:
         assert curated_folder.is_dir(), f"Curated folder {curated_folder} does not exist"
@@ -143,7 +140,7 @@ if __name__ == "__main__":
                     nwb_file_name = f"{nwb_original_file_name}.nwb"
                 else:
                     nwb_file_name = f"{nwb_original_file_name}_{block_str}_{recording_str}.nwb"
-                nwbfile_output_path = output_folder / nwb_file_name
+                nwbfile_output_path = results_folder / nwb_file_name
 
                 # copy to results to avoid read-only issues
                 if nwbfile_input_path.is_dir():
