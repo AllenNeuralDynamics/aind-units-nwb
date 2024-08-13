@@ -130,11 +130,19 @@ if __name__ == "__main__":
         if len(group_ids) == 0:
             group_ids = [""]
 
+        block_ids = sorted(block_ids)
+        recording_ids = sorted(recording_ids)
+        stream_names = sorted(stream_names)
+
+        print(f"Number of NWB files to write: {len(block_ids) * len(recording_ids)}")
+        print(f"Number of streams to write for each file: {len(stream_names)}")
+
         nwb_output_files = []
         multi_input_files = False
         if len(nwb_files) > 1:
-            assert len(nwb_files) == int(len(block_ids) * len(recording_ids)), (
-                "Inconsistent number of input NWB files with number of blocks and recordings"
+            assert len(nwb_files) >= len(block_ids) * len(recording_ids), (
+                "Inconsistent number of input NWB files with number of blocks and recordings: "
+                f"Num NWB files: {len(nwb_files)} - Num files to write: {len(block_ids) * len(recording_ids)}"
             )
             multi_input_files = True
 
@@ -145,9 +153,12 @@ if __name__ == "__main__":
                     nwb_input_path_for_current = [
                         p for p in nwb_files if block_str in p.stem and recording_str in p.stem
                     ]
-                    assert len(nwb_input_path_for_current) == 1
+                    assert len(nwb_input_path_for_current) == 1, (
+                        f"Could not find input NWB file for {block_str}-{recording_str}"
+                    )
                     nwbfile_input_path = nwb_input_path_for_current[0]
-                    nwbfile_output_path = output_folder / "{nwbfile_input_path.stem}.nwb"
+                    print(f"Found input NWB file for {block_str}-{recording_str}: {nwbfile_input_path.name}")
+                    nwbfile_output_path = output_folder / f"{nwbfile_input_path.stem}.nwb"
                 else:
                     nwb_original_file_name = nwbfile_input_path.stem
                     if block_str in nwb_original_file_name and recording_str in nwb_original_file_name:
