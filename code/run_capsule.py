@@ -66,11 +66,13 @@ if __name__ == "__main__":
     # find raw data
     job_json_files = [p for p in data_folder.iterdir() if p.suffix == ".json" and "job" in p.name]
     job_dicts = []
+    recording_names_in_json = []
     for job_json_file in job_json_files:
         with open(job_json_file) as f:
             job_dict = json.load(f)
+            recording_names_in_json.append(job_dict["recording_name"])
         job_dicts.append(job_dict)
-    print(f"Found {len(job_dicts)} JSON job files")
+    print(f"Found {len(job_dicts)} JSON job files. Recording names:\n{recording_names_in_json}")
 
     # find sorted data
     sorted_folders = [
