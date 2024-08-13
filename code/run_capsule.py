@@ -40,7 +40,7 @@ if __name__ == "__main__":
         for p in data_folder.glob("**/*")
         if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")) and ("ecephys_" in p.name or "behavior_" in p.name) and "/nwb/" not in str(p)
     ]
-    assert len(nwb_files) == 1, "Attach one base NWB file data at a time"
+    assert len(nwb_files) > 0, "Attach at least one base NWB file"
     nwbfile_input_path = nwb_files[0]
 
     if nwbfile_input_path.is_dir():
@@ -127,16 +127,42 @@ if __name__ == "__main__":
         if len(group_ids) == 0:
             group_ids = [""]
 
+        block_ids = sorted(block_ids)
+        recording_ids = sorted(recording_ids)
+        stream_names = sorted(stream_names)
+
+        print(f"Number of NWB files to write: {len(block_ids) * len(recording_ids)}")
+        print(f"Number of streams to write for each file: {len(stream_names)}")
+
         nwb_output_files = []
+        multi_input_files = False
+        if len(nwb_files) > 1:
+            assert len(nwb_files) >= len(block_ids) * len(recording_ids), (
+                "Inconsistent number of input NWB files with number of blocks and recordings: "
+                f"Num NWB files: {len(nwb_files)} - Num files to write: {len(block_ids) * len(recording_ids)}"
+            )
+            multi_input_files = True
+
         for block_index, block_str in enumerate(block_ids):
             for segment_index, recording_str in enumerate(recording_ids):
                 # add recording/experiment id if needed
-                nwb_original_file_name = nwbfile_input_path.stem
-                if block_str in nwb_original_file_name and recording_str in nwb_original_file_name:
-                    nwb_file_name = f"{nwb_original_file_name}.nwb"
+                if multi_input_files:
+                    nwb_input_path_for_current = [
+                        p for p in nwb_files if block_str in p.stem and recording_str in p.stem
+                    ]
+                    assert len(nwb_input_path_for_current) == 1, (
+                        f"Could not find input NWB file for {block_str}-{recording_str}"
+                    )
+                    nwbfile_input_path = nwb_input_path_for_current[0]
+                    print(f"Found input NWB file for {block_str}-{recording_str}: {nwbfile_input_path.name}")
+                    nwbfile_output_path = results_folder / f"{nwbfile_input_path.stem}.nwb"
                 else:
-                    nwb_file_name = f"{nwb_original_file_name}_{block_str}_{recording_str}.nwb"
-                nwbfile_output_path = results_folder / nwb_file_name
+                    nwb_original_file_name = nwbfile_input_path.stem
+                    if block_str in nwb_original_file_name and recording_str in nwb_original_file_name:
+                        nwb_file_name = f"{nwb_original_file_name}.nwb"
+                    else:
+                        nwb_file_name = f"{nwb_original_file_name}_{block_str}_{recording_str}.nwb"
+                    nwbfile_output_path = results_folder / nwb_file_name
 
                 # copy to results to avoid read-only issues
                 if nwbfile_input_path.is_dir():
