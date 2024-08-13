@@ -1,5 +1,5 @@
 metadata_version: 1
-name: NWB-Packaging-Units (multi)
+name: NWB-Packaging-Units
 description: This specialized capsule is designed to append units information to a
   base NWB file, including spiking data and unit properties. In particular, it adds
   the Units table and several properties associated with the units, such as quality
