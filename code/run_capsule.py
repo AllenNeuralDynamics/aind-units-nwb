@@ -253,9 +253,14 @@ if __name__ == "__main__":
                                 )
                             )
 
-                            analyzer = si.load_sorting_analyzer(
-                                postprocessed_folder / recording_name
-                            )
+                            if (postprocessed_folder / f"{recording_name}.zarr").is_dir():
+                                # zarr format
+                                analyzer_folder = postprocessed_folder / f"{recording_name}.zarr"
+                            else:
+                                # binary format
+                                analyzer_folder = postprocessed_folder / recording_name
+
+                            analyzer = si.load_sorting_analyzer(analyzer_folder)
 
                             # Load curated sorting and set properties
                             sorting_curated = si.load_extractor(curated_folder / recording_name)
