@@ -40,7 +40,7 @@ if __name__ == "__main__":
         for p in data_folder.glob("**/*")
         if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")) and ("ecephys_" in p.name or "behavior_" in p.name) and "/nwb/" not in str(p)
     ]
-    assert len(nwb_files) == 1, "Attach one base NWB file data at a time"
+    assert len(nwb_files) > 0, "Attach at least one base NWB file"
     nwbfile_input_path = nwb_files[0]
 
     if nwbfile_input_path.is_dir():
@@ -51,6 +51,14 @@ if __name__ == "__main__":
         NWB_BACKEND = "hdf5"
         io_class = NWBHDF5IO
     print(f"NWB backend: {NWB_BACKEND}")
+
+    # if more than 1 input NWB files, we copy them all to the results
+    # since some processing might have failed
+    for nwb_file_path in nwb_files:
+        if nwb_file_path.is_dir():
+            shutil.copytree(nwb_file_path, results_folder / nwb_file_path.name)
+        else:
+            shutil.copyfile(nwb_file_path, results_folder / nwb_file_path.name)
 
     # find raw data
     ecephys_folders = [
@@ -66,11 +74,13 @@ if __name__ == "__main__":
     # find raw data
     job_json_files = [p for p in data_folder.iterdir() if p.suffix == ".json" and "job" in p.name]
     job_dicts = []
+    recording_names_in_json = []
     for job_json_file in job_json_files:
         with open(job_json_file) as f:
             job_dict = json.load(f)
+            recording_names_in_json.append(job_dict["recording_name"])
         job_dicts.append(job_dict)
-    print(f"Found {len(job_dicts)} JSON job files")
+    print(f"Found {len(job_dicts)} JSON job files. Recording names:\n{recording_names_in_json}")
 
     # find sorted data
     sorted_folders = [
@@ -131,22 +141,49 @@ if __name__ == "__main__":
         if len(group_ids) == 0:
             group_ids = [""]
 
+        block_ids = sorted(block_ids)
+        recording_ids = sorted(recording_ids)
+        stream_names = sorted(stream_names)
+
+        print(f"Number of NWB files to write: {len(block_ids) * len(recording_ids)}")
+        print(f"Number of streams to write for each file: {len(stream_names)}")
+
         nwb_output_files = []
+        multi_input_files = False
+        if len(nwb_files) > 1:
+            assert len(nwb_files) >= len(block_ids) * len(recording_ids), (
+                "Inconsistent number of input NWB files with number of blocks and recordings: "
+                f"Num NWB files: {len(nwb_files)} - Num files to write: {len(block_ids) * len(recording_ids)}"
+            )
+            multi_input_files = True
+
         for block_index, block_str in enumerate(block_ids):
             for segment_index, recording_str in enumerate(recording_ids):
                 # add recording/experiment id if needed
-                nwb_original_file_name = nwbfile_input_path.stem
-                if block_str in nwb_original_file_name and recording_str in nwb_original_file_name:
-                    nwb_file_name = f"{nwb_original_file_name}.nwb"
+                if multi_input_files:
+                    nwb_input_path_for_current = [
+                        p for p in nwb_files if block_str in p.stem and recording_str in p.stem
+                    ]
+                    assert len(nwb_input_path_for_current) == 1, (
+                        f"Could not find input NWB file for {block_str}-{recording_str}"
+                    )
+                    nwbfile_input_path = nwb_input_path_for_current[0]
+                    print(f"Found input NWB file for {block_str}-{recording_str}: {nwbfile_input_path.name}")
+                    nwbfile_output_path = results_folder / f"{nwbfile_input_path.stem}.nwb"
+                    # in this case the nwb files have been already copied to the results folder
                 else:
-                    nwb_file_name = f"{nwb_original_file_name}_{block_str}_{recording_str}.nwb"
-                nwbfile_output_path = results_folder / nwb_file_name
+                    nwb_original_file_name = nwbfile_input_path.stem
+                    if block_str in nwb_original_file_name and recording_str in nwb_original_file_name:
+                        nwb_file_name = f"{nwb_original_file_name}.nwb"
+                    else:
+                        nwb_file_name = f"{nwb_original_file_name}_{block_str}_{recording_str}.nwb"
+                    nwbfile_output_path = results_folder / nwb_file_name
 
-                # copy to results to avoid read-only issues
-                if nwbfile_input_path.is_dir():
-                    shutil.copytree(nwbfile_input_path, nwbfile_output_path)
-                else:
-                    shutil.copyfile(nwbfile_input_path, nwbfile_output_path)
+                    # copy to results to avoid read-only issues
+                    if nwbfile_input_path.is_dir():
+                        shutil.copytree(nwbfile_input_path, nwbfile_output_path)
+                    else:
+                        shutil.copyfile(nwbfile_input_path, nwbfile_output_path)
 
                 # Find probe devices (this will only work for AIND)
                 devices_from_rig, target_locations = get_devices_from_rig_metadata(
