@@ -54,11 +54,12 @@ if __name__ == "__main__":
 
     # if more than 1 input NWB files, we copy them all to the results
     # since some processing might have failed
-    for nwb_file_path in nwb_files:
-        if nwb_file_path.is_dir():
-            shutil.copytree(nwb_file_path, results_folder / nwb_file_path.name)
-        else:
-            shutil.copyfile(nwb_file_path, results_folder / nwb_file_path.name)
+    if len(nwb_files) > 1:
+        for nwb_file_path in nwb_files:
+            if nwb_file_path.is_dir():
+                shutil.copytree(nwb_file_path, results_folder / nwb_file_path.name)
+            else:
+                shutil.copyfile(nwb_file_path, results_folder / nwb_file_path.name)
 
     # find raw data
     ecephys_folders = [
