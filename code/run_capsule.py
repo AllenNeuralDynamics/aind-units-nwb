@@ -54,11 +54,12 @@ if __name__ == "__main__":
 
     # if more than 1 input NWB files, we copy them all to the results
     # since some processing might have failed
-    for nwb_file_path in nwb_files:
-        if nwb_file_path.is_dir():
-            shutil.copytree(nwb_file_path, results_folder / nwb_file_path.name)
-        else:
-            shutil.copyfile(nwb_file_path, results_folder / nwb_file_path.name)
+    if len(nwb_files) > 1:
+        for nwb_file_path in nwb_files:
+            if nwb_file_path.is_dir():
+                shutil.copytree(nwb_file_path, results_folder / nwb_file_path.name)
+            else:
+                shutil.copyfile(nwb_file_path, results_folder / nwb_file_path.name)
 
     # find raw data
     ecephys_folders = [
@@ -179,7 +180,11 @@ if __name__ == "__main__":
                         nwb_file_name = f"{nwb_original_file_name}_{block_str}_{recording_str}.nwb"
                     nwbfile_output_path = results_folder / nwb_file_name
 
+<<<<<<< HEAD
                     # copy to results to avoid read-only issues
+=======
+                    # copy nwb input file to results to read in append mode
+>>>>>>> fed27f0441f2fb91b028dd43dc3a8acb3d6f01c2
                     if nwbfile_input_path.is_dir():
                         shutil.copytree(nwbfile_input_path, nwbfile_output_path)
                     else:
