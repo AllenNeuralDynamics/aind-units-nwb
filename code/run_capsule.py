@@ -180,11 +180,7 @@ if __name__ == "__main__":
                         nwb_file_name = f"{nwb_original_file_name}_{block_str}_{recording_str}.nwb"
                     nwbfile_output_path = results_folder / nwb_file_name
 
-<<<<<<< HEAD
-                    # copy to results to avoid read-only issues
-=======
                     # copy nwb input file to results to read in append mode
->>>>>>> fed27f0441f2fb91b028dd43dc3a8acb3d6f01c2
                     if nwbfile_input_path.is_dir():
                         shutil.copytree(nwbfile_input_path, nwbfile_output_path)
                     else:
