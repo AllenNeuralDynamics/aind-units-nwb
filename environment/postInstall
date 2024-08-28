@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-set -e
-
-git clone https://github.com/catalystneuro/neuroconv.git
-cd neuroconv
-git checkout 6df86608365ec9d2e7a6b7d0dab8a0f7196fdae7
-pip install --no-cache-dir .
-cd ..
