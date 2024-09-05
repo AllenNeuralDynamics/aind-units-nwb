@@ -219,8 +219,9 @@ if __name__ == "__main__":
                             added_stream_names.append(stream_str)
 
                             recording = si.load_extractor(job_dict["recording_dict"], base_folder=data_folder)
-                            # set times as np.array to speed up spike train retrieval later
-                            recording.set_times(np.array(recording.get_times()))
+                            skip_times = job_dict.get("skip_times", False)
+                            if skip_times:
+                                recording.reset_times()
 
                             # Add device and electrode group
                             probe_device_name = None
