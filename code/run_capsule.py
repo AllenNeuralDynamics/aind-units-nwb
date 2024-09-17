@@ -90,7 +90,11 @@ if __name__ == "__main__":
 
     if len(sorted_folders) == 0:
         # pipeline mode
-        sorted_folder = data_folder
+        if (data_folder / "collect_pipeline_output_test").is_dir():
+            print("\n*******************\n**** TEST MODE ****\n*******************\n")
+            sorted_folder = data_folder / "collect_pipeline_output_test"
+        else:
+            sorted_folder = data_folder
     elif len(sorted_folders) == 1:
         # capsule mode
         sorted_folder = sorted_folders[0]
@@ -215,8 +219,9 @@ if __name__ == "__main__":
                             added_stream_names.append(stream_str)
 
                             recording = si.load_extractor(job_dict["recording_dict"], base_folder=data_folder)
-                            # set times as np.array to speed up spike train retrieval later
-                            recording.set_times(np.array(recording.get_times()))
+                            skip_times = job_dict.get("skip_times", False)
+                            if skip_times:
+                                recording.reset_times()
 
                             # Add device and electrode group
                             probe_device_name = None
@@ -287,7 +292,14 @@ if __name__ == "__main__":
                                 )
                             )
 
-                            we = si.load_waveforms(postprocessed_folder / recording_name, with_recording=False)
+                            if (postprocessed_folder / f"{recording_name}.zarr").is_dir():
+                                # zarr format
+                                analyzer_folder = postprocessed_folder / f"{recording_name}.zarr"
+                            else:
+                                # binary format
+                                analyzer_folder = postprocessed_folder / recording_name
+
+                            analyzer = si.load_sorting_analyzer(analyzer_folder)
 
                             # Load curated sorting and set properties
                             sorting_curated = si.load_extractor(curated_folder / recording_name)
@@ -301,11 +313,10 @@ if __name__ == "__main__":
                             sorting_curated.set_property("ks_unit_id", sorting_curated.unit_ids)
 
                             # Add 'amplitude' property
-                            amplitudes = np.round(list(si.get_template_extremum_amplitude(we).values()), 2)
+                            amplitudes = np.round(list(si.get_template_extremum_amplitude(analyzer, mode="peak_to_peak").values()), 2)
                             sorting_curated.set_property("amplitude", amplitudes)
-
                             # Add depth property
-                            unit_locations = np.round(we.load_extension("unit_locations").get_data(), 2)
+                            unit_locations = np.round(analyzer.get_extension("unit_locations").get_data(), 2)
                             sorting_curated.set_property("estimated_x", unit_locations[:, 0])
                             sorting_curated.set_property("estimated_y", unit_locations[:, 1])
                             if unit_locations.shape[1] == 3:
@@ -315,7 +326,7 @@ if __name__ == "__main__":
 
                             # Register recording for precise timestamps
                             sorting_curated.register_recording(recording)
-                            we.sorting = sorting_curated
+                            analyzer.sorting = sorting_curated
 
                             # Retrieve sorter name
                             sorter_log_file = spikesorted_folder / recording_name / "spikeinterface_log.json"
@@ -328,14 +339,13 @@ if __name__ == "__main__":
                             # set channel groups to match previously added ephys electrodes
                             recording.set_channel_groups([probe_device_name] * recording.get_num_channels())
                             add_waveforms_with_uneven_channels(
-                                waveform_extractor=we,
+                                sorting_analyzer=analyzer,
                                 recording=recording,
                                 nwbfile=nwbfile,
                                 metadata=electrode_metadata,
                                 skip_properties=skip_unit_properties,
                                 units_description=units_description,
                             )
-
                     print(f"Added {len(added_stream_names)} streams")
 
                     if NWB_BACKEND == "zarr":
