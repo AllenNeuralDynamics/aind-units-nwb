@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from uuid import uuid4
+import time
 
 import probeinterface as pi
 import spikeinterface as si
@@ -34,6 +35,9 @@ skip_unit_properties = [
 
 
 if __name__ == "__main__":
+    print("\n\nNWB  EXPORT UNITS")
+    t_export_start = time.perf_counter()
+
     # find base NWB file
     nwb_files = [
         p
@@ -353,8 +357,16 @@ if __name__ == "__main__":
                     else:
                         write_args = {}
 
+                    t_write_start = time.perf_counter()
                     append_io.write(nwbfile)
+                    t_write_end = time.perf_counter()
+                    elapsed_time_write = np.round(t_write_end - t_write_start, 2)
+                    print(f"Writing time: {elapsed_time_write}s")
                     # with io_class(str(nwbfile_output_path), "w") as export_io:
                     #    export_io.export(src_io=read_io, nwbfile=nwbfile, write_args=write_args)
                     print(f"Done writing {nwbfile_output_path}")
                     nwb_output_files.append(nwbfile_output_path)
+
+    t_export_end = time.perf_counter()
+    elapsed_time_export = np.round(t_export_end - t_export_start, 2)
+    print(f"NWB EXPORT UNITS time: {elapsed_time_export}s")
