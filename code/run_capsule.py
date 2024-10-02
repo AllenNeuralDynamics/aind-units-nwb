@@ -303,7 +303,7 @@ if __name__ == "__main__":
                                 # binary format
                                 analyzer_folder = postprocessed_folder / recording_name
 
-                            analyzer = si.load_sorting_analyzer(analyzer_folder)
+                            analyzer = si.load_sorting_analyzer(analyzer_folder, load_extensions=False)
 
                             # Load curated sorting and set properties
                             sorting_curated = si.load_extractor(curated_folder / recording_name)
