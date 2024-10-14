@@ -203,7 +203,7 @@ def add_waveforms_with_uneven_channels(
     from neuroconv.tools.spikeinterface.spikeinterface import (
         add_electrodes_info_to_nwbfile,
         add_units_table_to_nwbfile,
-        get_electrode_group_indices,
+        _get_electrode_group_indices,
     )
 
     # TODO: move into add_units
@@ -251,7 +251,7 @@ def add_waveforms_with_uneven_channels(
                 sorting_copy.set_property(prop, tm[prop])
 
     add_electrodes_info_to_nwbfile(recording, nwbfile=nwbfile, metadata=metadata)
-    electrode_group_indices = get_electrode_group_indices(recording, nwbfile=nwbfile)
+    electrode_group_indices = _get_electrode_group_indices(recording, nwbfile=nwbfile)
     unit_electrode_indices = [electrode_group_indices] * num_units
 
     add_units_table_to_nwbfile(
