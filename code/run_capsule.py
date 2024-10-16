@@ -35,7 +35,7 @@ skip_unit_properties = [
 
 
 if __name__ == "__main__":
-    print("\n\nNWB  EXPORT UNITS")
+    print("\n\nNWB EXPORT UNITS")
     t_export_start = time.perf_counter()
 
     # find base NWB file
