@@ -44,7 +44,6 @@ if __name__ == "__main__":
         for p in data_folder.iterdir()
         if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")) and "/nwb/" not in str(p)
     ]
-    print(nwb_files)
     assert len(nwb_files) > 0, "Attach at least one base NWB file"
     nwbfile_input_path = nwb_files[0]
 
