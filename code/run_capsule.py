@@ -35,14 +35,14 @@ skip_unit_properties = [
 
 
 if __name__ == "__main__":
-    print("\n\nNWB  EXPORT UNITS")
+    print("\n\nNWB EXPORT UNITS")
     t_export_start = time.perf_counter()
 
     # find base NWB file
     nwb_files = [
         p
-        for p in data_folder.glob("**/*")
-        if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")) and ("ecephys_" in p.name or "behavior_" in p.name) and "/nwb/" not in str(p)
+        for p in data_folder.iterdir()
+        if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")) and "/nwb/" not in str(p)
     ]
     assert len(nwb_files) > 0, "Attach at least one base NWB file"
     nwbfile_input_path = nwb_files[0]
