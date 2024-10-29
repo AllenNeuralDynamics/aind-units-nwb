@@ -167,7 +167,7 @@ if __name__ == "__main__":
                 # add recording/experiment id if needed
                 if multi_input_files:
                     nwb_input_path_for_current = [
-                        p for p in nwb_files if block_str in p.stem and recording_str in p.stem
+                        p for p in nwb_files if f"{block_str}_" in p.stem and p.stem.endswith(recording_str)
                     ]
                     assert len(nwb_input_path_for_current) == 1, (
                         f"Could not find input NWB file for {block_str}-{recording_str}. Available NWB files are: {nwb_files}"
