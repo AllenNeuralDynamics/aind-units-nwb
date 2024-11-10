@@ -56,7 +56,7 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
         if session_schema_version is None:
             warnings.warn(f"Session file does not have schema_version")
             return devices, devices_target_location
-        if parse(session_schema_version) >= parse("0.3.0") and parse(session_schema_version) < parse("0.4.0"):
+        if parse(session_schema_version) >= parse("0.3.0"):
             data_streams = session.get("data_streams", None)
             if data_streams is None:
                 warnings.warn(f"Session file does not have data_streams")
@@ -69,17 +69,18 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
         return None, None
 
     stimulus_epochs = session.get("stimulus_epochs", None)
+    stimulus_device_names = []
     if stimulus_epochs is not None:
-        stimulus_device_names = []
         for epoch in stimulus_epochs:
             stimulus_device_names += epoch.get("stimulus_device_names", [])
 
+    devices = None
+    devices_target_location = None
     if rig is not None:
         rig_schema_version = rig.get("schema_version", None)
         if rig_schema_version is None:
             warnings.warn(f"Rig file does not have schema_version")
-            return None, None
-        if parse(rig_schema_version) >= parse("0.5.0") and parse(rig_schema_version) < parse("0.6.0"):
+        elif parse(rig_schema_version) >= parse("0.5.1"):
             ephys_modules = session["data_streams"][segment_index]["ephys_modules"]
             ephys_assemblies = rig.get("ephys_assemblies", [])
             laser_assemblies = rig.get("laser_assemblies", [])
@@ -102,7 +103,7 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
                         else:
                             probe_device_name = "Probe"
                     if probe_model_name is not None:
-                        probe_device_description += f"Model: {probe_model_name}"
+                        probe_device_description += f"Model: {probe_device_description}"
                     if probe_serial_number is not None:
                         if len(probe_device_description) > 0:
                             probe_device_description += " - "
