@@ -18,6 +18,14 @@ from pynwb import NWBHDF5IO
 from pynwb.file import Device
 from hdmf_zarr import NWBZarrIO
 
+# AIND
+try:
+    from aind_log_utils import log
+
+    HAVE_AIND_LOG_UTILS = True
+except ImportError:
+    HAVE_AIND_LOG_UTILS = False
+
 from utils import get_devices_from_rig_metadata, add_waveforms_with_uneven_channels
 
 
@@ -74,7 +82,26 @@ if __name__ == "__main__":
         and "sorted" not in p.name and "nwb" not in p.name
     ]
     assert len(ecephys_folders) == 1, "Attach one ecephys folder at a time"
-    ecephys_folder = ecephys_folders[0]
+    ecephys_session_folder = ecephys_folders[0]
+    if HAVE_AIND_LOG_UTILS:
+        # look for subject.json and data_description.json files
+        subject_json = ecephys_session_folder / "subject.json"
+        subject_id = "undefined"
+        if subject_json.is_file():
+            subject_data = json.load(open(subject_json, "r"))
+            subject_id = subject_data["subject_id"]
+
+        data_description_json = ecephys_session_folder / "data_description.json"
+        session_name = "undefined"
+        if data_description_json.is_file():
+            data_description = json.load(open(data_description_json, "r"))
+            session_name = data_description["name"]
+
+        log.setup_logging(
+            "NWB Packaging Units",
+            mouse_id=subject_id,
+            session_name=session_name,
+        )
 
     # find raw data
     job_json_files = [p for p in data_folder.iterdir() if p.suffix == ".json" and "job" in p.name]
@@ -192,7 +219,7 @@ if __name__ == "__main__":
 
                 # Find probe devices (this will only work for AIND)
                 devices_from_rig, target_locations = get_devices_from_rig_metadata(
-                    ecephys_folder, segment_index=segment_index
+                    ecephys_session_folder, segment_index=segment_index
                 )
 
                 with io_class(str(nwbfile_output_path), "a") as append_io:
