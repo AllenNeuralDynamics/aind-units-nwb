@@ -3,6 +3,7 @@ import shutil
 import json
 from pathlib import Path
 import numpy as np
+import logging
 
 from uuid import uuid4
 import time
@@ -43,7 +44,7 @@ skip_unit_properties = [
 
 
 if __name__ == "__main__":
-    print("\n\nNWB EXPORT UNITS")
+    logging.info("\n\nNWB EXPORT UNITS")
     t_export_start = time.perf_counter()
 
     # find base NWB file
@@ -62,7 +63,7 @@ if __name__ == "__main__":
     else:
         NWB_BACKEND = "hdf5"
         io_class = NWBHDF5IO
-    print(f"NWB backend: {NWB_BACKEND}")
+    logging.info(f"NWB backend: {NWB_BACKEND}")
 
     # if more than 1 input NWB files, we copy them all to the results
     # since some processing might have failed
@@ -112,7 +113,7 @@ if __name__ == "__main__":
             job_dict = json.load(f)
             recording_names_in_json.append(job_dict["recording_name"])
         job_dicts.append(job_dict)
-    print(f"Found {len(job_dicts)} JSON job files. Recording names:\n{recording_names_in_json}")
+    logging.info(f"Found {len(job_dicts)} JSON job files. Recording names:\n{recording_names_in_json}")
 
     # find sorted data
     sorted_folders = [
@@ -122,7 +123,7 @@ if __name__ == "__main__":
     if len(sorted_folders) == 0:
         # pipeline mode
         if (data_folder / "collect_pipeline_output_test").is_dir():
-            print("\n*******************\n**** TEST MODE ****\n*******************\n")
+            logging.info("\n*******************\n**** TEST MODE ****\n*******************\n")
             sorted_folder = data_folder / "collect_pipeline_output_test"
         else:
             sorted_folder = data_folder
@@ -134,7 +135,7 @@ if __name__ == "__main__":
     curated_folder = sorted_folder / "curated"
     spikesorted_folder = sorted_folder / "spikesorted"
     if not postprocessed_folder.is_dir():
-        print("Postprocessed folder not found. Skipping NWB export")
+        logging.info("Postprocessed folder not found. Skipping NWB export")
         # create dummy nwb folder to avoid pipeline failure
         error_txt = results_folder / "error.txt"
         error_txt.write_text("Postprocessed folder not found. No NWB files were created.")
@@ -177,8 +178,8 @@ if __name__ == "__main__":
         recording_ids = sorted(recording_ids)
         stream_names = sorted(stream_names)
 
-        print(f"Number of NWB files to write: {len(block_ids) * len(recording_ids)}")
-        print(f"Number of streams to write for each file: {len(stream_names)}")
+        logging.info(f"Number of NWB files to write: {len(block_ids) * len(recording_ids)}")
+        logging.info(f"Number of streams to write for each file: {len(stream_names)}")
 
         nwb_output_files = []
         multi_input_files = False
@@ -200,7 +201,7 @@ if __name__ == "__main__":
                         f"Could not find input NWB file for {block_str}-{recording_str}. Available NWB files are: {nwb_files}"
                     )
                     nwbfile_input_path = nwb_input_path_for_current[0]
-                    print(f"Found input NWB file for {block_str}-{recording_str}: {nwbfile_input_path.name}")
+                    logging.info(f"Found input NWB file for {block_str}-{recording_str}: {nwbfile_input_path.name}")
                     nwbfile_output_path = results_folder / f"{nwbfile_input_path.stem}.nwb"
                     # in this case the nwb files have been already copied to the results folder
                 else:
@@ -234,7 +235,7 @@ if __name__ == "__main__":
                                 recording_name += f"_{group_str}"
                                 stream_str += f"_{group_str}"
                             if not (curated_folder / recording_name).is_dir():
-                                print(f"Curated units for {recording_name} not found.")
+                                logging.info(f"Curated units for {recording_name} not found.")
                                 continue
 
                             # load JSON and recordings
@@ -244,7 +245,7 @@ if __name__ == "__main__":
                                     recording_job_dict = job_dict
                                     break
                             if recording_job_dict is None:
-                                print(f"Could not find JSON file associated to {recording_name}")
+                                logging.info(f"Could not find JSON file associated to {recording_name}")
                                 continue
 
                             added_stream_names.append(stream_str)
@@ -267,7 +268,7 @@ if __name__ == "__main__":
                                         probe_device_name = device_name
                                         electrode_group_location = target_locations.get(device_name, "unknown")
                                         probe_device = device
-                                        print(
+                                        logging.info(
                                             f"Found device from rig: {device_name} at location {electrode_group_location}"
                                         )
                                         break
@@ -301,13 +302,13 @@ if __name__ == "__main__":
                                         manufacturer=probe_device_manufacturer,
                                     )
                                 else:
-                                    print("\tCould not load device information: using default Device")
+                                    logging.info("\tCould not load device information: using default Device")
                                     probe_device_name = "Device"
                                     probe_device = Device(name=probe_device_name, description="Default device")
 
                                 if probe_device_name not in nwbfile.devices:
                                     nwbfile.add_device(probe_device)
-                                    print(f"\tAdded probe device: {probe_device.name} from probeinterface")
+                                    logging.info(f"\tAdded probe device: {probe_device.name} from probeinterface")
 
                             electrode_metadata = dict(
                                 Ecephys=dict(
@@ -353,7 +354,7 @@ if __name__ == "__main__":
                             if unit_locations.shape[1] == 3:
                                 sorting_curated.set_property("estimated_z", unit_locations[:, 2])
                             sorting_curated.set_property("depth", unit_locations[:, 1])
-                            print(f"\tAdding {len(sorting_curated.unit_ids)} units from stream {stream_name}")
+                            logging.info(f"\tAdding {len(sorting_curated.unit_ids)} units from stream {stream_name}")
 
                             # Register recording for precise timestamps
                             sorting_curated.register_recording(recording)
@@ -377,7 +378,7 @@ if __name__ == "__main__":
                                 skip_properties=skip_unit_properties,
                                 units_description=units_description,
                             )
-                    print(f"Added {len(added_stream_names)} streams")
+                    logging.info(f"Added {len(added_stream_names)} streams")
 
                     if NWB_BACKEND == "zarr":
                         write_args = {'link_data': False}
@@ -388,12 +389,12 @@ if __name__ == "__main__":
                     append_io.write(nwbfile)
                     t_write_end = time.perf_counter()
                     elapsed_time_write = np.round(t_write_end - t_write_start, 2)
-                    print(f"Writing time: {elapsed_time_write}s")
+                    logging.info(f"Writing time: {elapsed_time_write}s")
                     # with io_class(str(nwbfile_output_path), "w") as export_io:
                     #    export_io.export(src_io=read_io, nwbfile=nwbfile, write_args=write_args)
-                    print(f"Done writing {nwbfile_output_path}")
+                    logging.info(f"Done writing {nwbfile_output_path}")
                     nwb_output_files.append(nwbfile_output_path)
 
     t_export_end = time.perf_counter()
     elapsed_time_export = np.round(t_export_end - t_export_start, 2)
-    print(f"NWB EXPORT UNITS time: {elapsed_time_export}s")
+    logging.info(f"NWB EXPORT UNITS time: {elapsed_time_export}s")
