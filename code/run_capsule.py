@@ -44,35 +44,7 @@ skip_unit_properties = [
 
 
 if __name__ == "__main__":
-    logging.info("\n\nNWB EXPORT UNITS")
     t_export_start = time.perf_counter()
-
-    # find base NWB file
-    nwb_files = [
-        p
-        for p in data_folder.iterdir()
-        if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")) and "/nwb/" not in str(p)
-    ]
-    assert len(nwb_files) > 0, "Attach at least one base NWB file"
-    nwbfile_input_path = nwb_files[0]
-
-    if nwbfile_input_path.is_dir():
-        assert (nwbfile_input_path / ".zattrs").is_file(), f"{nwbfile_input_path.name} is not a valid Zarr folder"
-        NWB_BACKEND = "zarr"
-        io_class = NWBZarrIO
-    else:
-        NWB_BACKEND = "hdf5"
-        io_class = NWBHDF5IO
-    logging.info(f"NWB backend: {NWB_BACKEND}")
-
-    # if more than 1 input NWB files, we copy them all to the results
-    # since some processing might have failed
-    if len(nwb_files) > 1:
-        for nwb_file_path in nwb_files:
-            if nwb_file_path.is_dir():
-                shutil.copytree(nwb_file_path, results_folder / nwb_file_path.name)
-            else:
-                shutil.copyfile(nwb_file_path, results_folder / nwb_file_path.name)
 
     # find raw data
     ecephys_folders = [
@@ -103,6 +75,37 @@ if __name__ == "__main__":
             mouse_id=subject_id,
             session_name=session_name,
         )
+    else:
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    logging.info("\n\nNWB EXPORT UNITS")
+
+    # find base NWB file
+    nwb_files = [
+        p
+        for p in data_folder.iterdir()
+        if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")) and "/nwb/" not in str(p)
+    ]
+    assert len(nwb_files) > 0, "Attach at least one base NWB file"
+    nwbfile_input_path = nwb_files[0]
+
+    if nwbfile_input_path.is_dir():
+        assert (nwbfile_input_path / ".zattrs").is_file(), f"{nwbfile_input_path.name} is not a valid Zarr folder"
+        NWB_BACKEND = "zarr"
+        io_class = NWBZarrIO
+    else:
+        NWB_BACKEND = "hdf5"
+        io_class = NWBHDF5IO
+    logging.info(f"NWB backend: {NWB_BACKEND}")
+
+    # if more than 1 input NWB files, we copy them all to the results
+    # since some processing might have failed
+    if len(nwb_files) > 1:
+        for nwb_file_path in nwb_files:
+            if nwb_file_path.is_dir():
+                shutil.copytree(nwb_file_path, results_folder / nwb_file_path.name)
+            else:
+                shutil.copyfile(nwb_file_path, results_folder / nwb_file_path.name)
 
     # find raw data
     job_json_files = [p for p in data_folder.iterdir() if p.suffix == ".json" and "job" in p.name]
