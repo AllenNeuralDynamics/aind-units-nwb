@@ -154,6 +154,10 @@ if __name__ == "__main__":
         recording_ids = []
         group_ids = []
         stream_names = []
+
+        recording_sampling_frequencies = []
+        recording_num_channels = []
+
         for recording_name in recording_names:
             if "group" in recording_name:
                 block_str = recording_name.split("_")[0]
@@ -174,6 +178,34 @@ if __name__ == "__main__":
                 stream_names.append(stream_name)
             if group_str is not None and group_str not in group_ids:
                 group_ids.append(group_str)
+
+            # load the recording and check sampling rate and number of channels
+            recording_job_dict = None
+            for job_dict in job_dicts:
+                if job_dict["recording_name"] == recording_name:
+                    recording_job_dict = job_dict
+                    break
+            if recording_job_dict is not None:
+                recording = si.load_extractor(job_dict["recording_dict"], base_folder=data_folder)
+                recording_sampling_frequencies.append(recording.sampling_frequency)
+                recording_num_channels.append(recording.get_num_channels())
+
+        # if sampling frequencies or num channels are different, do not write waveforms
+        write_waveforms = True
+        if len(np.unique(recording_sampling_frequencies)) > 1:
+            logging.info(
+                f"Recordings from different blocks have different sampling frequencies: {recording_sampling_frequencies}"
+            )
+            write_waveforms = False
+        if len(np.unique(recording_num_channels)) > 1:
+            logging.info(
+                f"Recordings from different blocks have different number of channels: {recording_num_channels}"
+            )
+            write_waveforms = False
+
+        if not write_waveforms:
+            logging.info("Skipping waveform writing since recordings have different sampling frequencies or number of channels")
+
         if len(group_ids) == 0:
             group_ids = [""]
 
@@ -380,6 +412,7 @@ if __name__ == "__main__":
                                 metadata=electrode_metadata,
                                 skip_properties=skip_unit_properties,
                                 units_description=units_description,
+                                write_waveforms=write_waveforms,
                             )
                     logging.info(f"Added {len(added_stream_names)} streams")
 
