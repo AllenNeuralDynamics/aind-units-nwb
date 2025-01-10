@@ -1,4 +1,5 @@
 """ Writes Units to an NWB file """
+import sys
 import shutil
 import json
 from pathlib import Path
@@ -72,11 +73,11 @@ if __name__ == "__main__":
 
         log.setup_logging(
             "NWB Packaging Units",
-            mouse_id=subject_id,
-            session_name=session_name,
+            subject_id=subject_id,
+            asset_name=session_name,
         )
     else:
-        logging.basicConfig(level=logging.INFO, format="%(message)s")
+        logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
 
     logging.info("\n\nNWB EXPORT UNITS")
 
