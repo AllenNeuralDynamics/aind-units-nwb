@@ -118,7 +118,7 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
                     if probe_device_name not in probe_devices:
                         probe_devices[probe_device_name] = probe_device
                     # Add internal lasers for NP-opto
-                    if "lasers" in probe_info and len(probe_info["lasers"]) > 1:
+                    if "lasers" in probe_info and probe_info["lasers"] is not None and len(probe_info["lasers"]) > 1:
                         for laser in probe_info["lasers"]:
                             laser_device_name = laser["name"]
                             laser_device_description, laser_device_manufacturer = get_laser_description_manufacturer(
