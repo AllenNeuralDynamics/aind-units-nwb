@@ -83,7 +83,8 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
         elif parse(rig_schema_version) >= parse("0.5.1"):
             ephys_modules = session["data_streams"][segment_index]["ephys_modules"]
             ephys_assemblies = rig.get("ephys_assemblies", [])
-            laser_assemblies = rig.get("laser_assemblies", [])
+            laser_assemblies = rig.get("laser_assemblies")
+            laser_assemblies = laser_assemblies if laser_assemblies is not None else []
 
             # gather all probes and lasers
             probe_devices = {}
