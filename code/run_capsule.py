@@ -156,9 +156,13 @@ if __name__ == "__main__":
         group_ids = []
         stream_names = []
 
-        recording_sampling_frequencies = []
-        recording_num_channels = []
-
+        # these dictionaries are used to check if recordings from the same block, but from different streams
+        # or groups have the same sampling frequency and number of channels
+        # if not, we skip writing waveform_means and standard_deviations since they require the same
+        # shape across all units
+        recording_sampling_frequencies = {}
+        recording_num_channels = {}
+        write_waveforms = {}
         for recording_name in recording_names:
             if "group" in recording_name:
                 block_str = recording_name.split("_")[0]
@@ -169,7 +173,7 @@ if __name__ == "__main__":
                 block_str = recording_name.split("_")[0]
                 recording_str = recording_name.split("_")[-1]
                 stream_name = "_".join(recording_name.split("_")[1:-1])
-                group_str = None
+                group_str = ""
 
             if block_str not in block_ids:
                 block_ids.append(block_str)
@@ -177,7 +181,7 @@ if __name__ == "__main__":
                 recording_ids.append(recording_str)
             if stream_name not in stream_names:
                 stream_names.append(stream_name)
-            if group_str is not None and group_str not in group_ids:
+            if group_str not in group_ids:
                 group_ids.append(group_str)
 
             # load the recording and check sampling rate and number of channels
@@ -186,26 +190,31 @@ if __name__ == "__main__":
                 if job_dict["recording_name"] == recording_name:
                     recording_job_dict = job_dict
                     break
+            write_waveforms[(block_str, group_str)] = True
             if recording_job_dict is not None:
                 recording = si.load_extractor(job_dict["recording_dict"], base_folder=data_folder)
-                recording_sampling_frequencies.append(recording.sampling_frequency)
-                recording_num_channels.append(recording.get_num_channels())
+                if (block_str, group_str) not in recording_sampling_frequencies:
+                    recording_sampling_frequencies[(block_str, group_str)] = []
+                if (block_str, group_str) not in recording_num_channels:
+                    recording_num_channels[(block_str, group_str)] = []
+                recording_sampling_frequencies[(block_str, group_str)].append(recording.sampling_frequency)
+                recording_num_channels[(block_str, group_str)].append(recording.get_num_channels())
 
-        # if sampling frequencies or num channels are different, do not write waveforms
-        write_waveforms = True
-        if len(np.unique(recording_sampling_frequencies)) > 1:
-            logging.info(
-                f"Recordings from different blocks have different sampling frequencies: {recording_sampling_frequencies}"
-            )
-            write_waveforms = False
-        if len(np.unique(recording_num_channels)) > 1:
-            logging.info(
-                f"Recordings from different blocks have different number of channels: {recording_num_channels}"
-            )
-            write_waveforms = False
-
-        if not write_waveforms:
-            logging.info("Skipping waveform writing since recordings have different sampling frequencies or number of channels")
+        # if sampling frequencies or num channels are different for different streams/groups, do not write waveforms
+        for key, sampling_frequencies in recording_sampling_frequencies.items():
+            write_waveforms[key] = True
+            if len(np.unique(sampling_frequencies)) > 1:
+                logging.info(
+                    f"Recordings from different blocks/groups have different sampling frequencies: {recording_sampling_frequencies}"
+                )
+                write_waveforms[key] = False
+        for key, num_channels in recording_num_channels.items():
+            write_waveforms[key] = True
+            if len(np.unique(num_channels)) > 1:
+                logging.info(
+                    f"Recordings from different blocks/groups have different number of channels: {recording_num_channels}"
+                )
+                write_waveforms[key] = False
 
         if len(group_ids) == 0:
             group_ids = [""]
@@ -377,6 +386,7 @@ if __name__ == "__main__":
                             sorting_curated.set_property(
                                 "device_name", [probe_device_name] * sorting_curated.get_num_units()
                             )
+                            sorting_curated.set_property("group", [group_str] * sorting_curated.get_num_units())
                             sorting_curated.set_property("unit_name", unit_uuids)
                             sorting_curated.set_property("ks_unit_id", sorting_curated.unit_ids)
 
@@ -413,7 +423,7 @@ if __name__ == "__main__":
                                 metadata=electrode_metadata,
                                 skip_properties=skip_unit_properties,
                                 units_description=units_description,
-                                write_waveforms=write_waveforms,
+                                write_waveforms=write_waveforms[(block_str, group_str)],
                             )
                     logging.info(f"Added {len(added_stream_names)} streams")
 
