@@ -117,7 +117,7 @@ if __name__ == "__main__":
             job_dict = json.load(f)
             recording_names_in_json.append(job_dict["recording_name"])
         job_dicts.append(job_dict)
-    logging.info(f"Found {len(job_dicts)} JSON job files. Recording names:\n{recording_names_in_json}")
+    logging.info(f"Found {len(job_dicts)} JSON job files")
 
     # find sorted data
     sorted_folders = [
@@ -148,7 +148,8 @@ if __name__ == "__main__":
         assert spikesorted_folder.is_dir(), f"Spikesorted folder {spikesorted_folder} does not exist"
 
         # we create a result NWB file for each experiment/recording
-        recording_names = [p.name for p in curated_folder.iterdir() if p.is_dir()]
+        recording_names = sorted([p.name for p in curated_folder.iterdir() if p.is_dir()])
+        logging.info(f"Found {len(recording_names)} processed recordings")
 
         # find blocks and recordings
         block_ids = []
@@ -162,18 +163,23 @@ if __name__ == "__main__":
         # shape across all units
         recording_sampling_frequencies = {}
         recording_num_channels = {}
+        recording_num_channels_all = {}
         write_waveforms = {}
+        aggregate_groups = {}
+        job_dicts_for_recording_name = {}
         for recording_name in recording_names:
             if "group" in recording_name:
                 block_str = recording_name.split("_")[0]
                 recording_str = recording_name.split("_")[-2]
                 group_str = recording_name.split("_")[-1]
                 stream_name = "_".join(recording_name.split("_")[1:-2])
+                recording_name_no_group = "_".join(recording_name.split("_")[:-1])
             else:
                 block_str = recording_name.split("_")[0]
                 recording_str = recording_name.split("_")[-1]
                 stream_name = "_".join(recording_name.split("_")[1:-1])
                 group_str = ""
+                recording_name_no_group = recording_name
 
             if block_str not in block_ids:
                 block_ids.append(block_str)
@@ -186,38 +192,65 @@ if __name__ == "__main__":
 
             # load the recording and check sampling rate and number of channels
             recording_job_dict = None
+            recording_job_dicts_all = []
             for job_dict in job_dicts:
-                if job_dict["recording_name"] == recording_name:
+                if recording_name_no_group in job_dict["recording_name"]:
+                    recording_job_dicts_all.append(job_dict)
+                if recording_name == job_dict["recording_name"]:
                     recording_job_dict = job_dict
-                    break
-            write_waveforms[(block_str, group_str)] = True
-            if recording_job_dict is not None:
-                recording = si.load_extractor(job_dict["recording_dict"], base_folder=data_folder)
-                if (block_str, group_str) not in recording_sampling_frequencies:
-                    recording_sampling_frequencies[(block_str, group_str)] = []
-                if (block_str, group_str) not in recording_num_channels:
-                    recording_num_channels[(block_str, group_str)] = []
-                recording_sampling_frequencies[(block_str, group_str)].append(recording.sampling_frequency)
-                recording_num_channels[(block_str, group_str)].append(recording.get_num_channels())
+            job_dicts_for_recording_name[recording_name] = recording_job_dicts_all
+            if len(recording_job_dicts_all) > 0 and recording_job_dict is not None:
+                recording = si.load_extractor(recording_job_dict["recording_dict"], base_folder=data_folder)
+                recording_list = [si.load_extractor(job_dict["recording_dict"], base_folder=data_folder) for job_dict in recording_job_dicts_all]
+                recording_all = si.aggregate_channels(recording_list)
+                if (block_str, recording_str) not in recording_sampling_frequencies:
+                    recording_sampling_frequencies[(block_str, recording_str)] = {}
+                if (block_str, recording_str) not in recording_num_channels:
+                    recording_num_channels[(block_str, recording_str)] = {}
+                if (block_str, recording_str) not in recording_num_channels_all:
+                    recording_num_channels_all[(block_str, recording_str)] = {}
+                recording_sampling_frequencies[(block_str, recording_str)][stream_name] = recording.sampling_frequency
+                recording_num_channels[(block_str, recording_str)][(stream_name, group_str)] = recording.get_num_channels()
+                recording_num_channels_all[(block_str, recording_str)][stream_name] = recording_all.get_num_channels()
+            else:
+                logging-info(f"Couldn't find job dict for {recording_name}")
 
-        # if sampling frequencies or num channels are different for different streams/groups, do not write waveforms
+        # if sampling frequencies or num channels are different for different streams, do not write waveforms for the block/recording
         for key, sampling_frequencies in recording_sampling_frequencies.items():
-            write_waveforms[key] = True
-            if len(np.unique(sampling_frequencies)) > 1:
+            if len(np.unique(sampling_frequencies.values())) > 1:
                 logging.info(
                     f"Recordings from different blocks/groups have different sampling frequencies: {recording_sampling_frequencies}"
                 )
                 write_waveforms[key] = False
+            else:
+                write_waveforms[key] = True
+        # for num channels, we have 3 options:
+        # 1. there are no channel groups OR there are channel groups with same number of channels for each stream
+        #    (.e.g, 2 NP2.0-4shank in the same experiment/recording --> each group has 96 electrodes)
+        # 2. there are channel groups, but in the same experiment/recording there is a mix of probes with/without groups,
+        #    but the sum of channels per probe is the same
+        #    (e.g. 1 NP2.0-4shank and 1 NP1.0 --> each shank has 96 electrodes, but the second probe has 384
+        # 3. there are channel groups/probes with incompatible number of channels.
+        #    (e.g., a 32-channel probe and a 384-channel probe in the same experiment/recording)
+        # For case 1, we can write waverorm_means/stds for individual groups only (96-channels)
+        # For case 2, we need to aggregate groups and pad waveforms with zeros
+        # For case 3, we cannot write waveforms
         for key, num_channels in recording_num_channels.items():
-            write_waveforms[key] = True
-            if len(np.unique(num_channels)) > 1:
-                logging.info(
-                    f"Recordings from different blocks/groups have different number of channels: {recording_num_channels}"
-                )
-                write_waveforms[key] = False
-
-        if len(group_ids) == 0:
-            group_ids = [""]
+            if write_waveforms[key]:
+                if len(np.unique(num_channels.values())) == 1:
+                    write_waveforms[key] = True
+                    aggregate_groups[key] = False
+                else:
+                    if key_all, num_channels_all in recording_num_channels_all.items():
+                        if len(np.unique(num_channels_all.values())) == 1:
+                            write_waveforms[key] = True
+                            aggregate_groups[key] = True
+                        else:
+                            logging.info(
+                                f"Recordings from different blocks/groups have different number of channels: {recording_num_channels}"
+                            )
+                            write_waveforms[key] = False
+                            aggregate_groups[key] = False
 
         block_ids = sorted(block_ids)
         recording_ids = sorted(recording_ids)
@@ -423,7 +456,7 @@ if __name__ == "__main__":
                                 metadata=electrode_metadata,
                                 skip_properties=skip_unit_properties,
                                 units_description=units_description,
-                                write_waveforms=write_waveforms[(block_str, group_str)],
+                                write_waveforms=write_waveforms[(block_str, recording_str)],
                             )
                     logging.info(f"Added {len(added_stream_names)} streams")
 
