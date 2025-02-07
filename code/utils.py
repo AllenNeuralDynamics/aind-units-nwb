@@ -262,7 +262,9 @@ def add_waveforms_with_uneven_channels(
             if prop not in sorting_copy.get_property_keys():
                 sorting_copy.set_property(prop, tm[prop])
 
-    add_electrodes_info_to_nwbfile(recording, nwbfile=nwbfile, metadata=metadata)
+    # add electrodes only if needed
+    if nwbfile.electrodes is None and write_waveforms:
+        add_electrodes_info_to_nwbfile(recording, nwbfile=nwbfile, metadata=metadata)
     electrode_group_indices = _get_electrode_group_indices(recording, nwbfile=nwbfile)
 
     if write_waveforms:
