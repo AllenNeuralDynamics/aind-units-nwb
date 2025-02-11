@@ -119,6 +119,9 @@ if __name__ == "__main__":
         job_dicts.append(job_dict)
     logging.info(f"Found {len(job_dicts)} JSON job files")
 
+    # check for timestamps to overwrite recording timestamps
+    timestamps_folder = data_folder / "timestamps"
+
     # find sorted data
     sorted_folders = [
         p for p in data_folder.iterdir() if p.is_dir() and "sorted" in p.name and "spikesorted" not in p.name
@@ -214,7 +217,7 @@ if __name__ == "__main__":
                 recording_num_channels[(block_str, recording_str)][(stream_name, group_str)] = recording.get_num_channels()
                 recording_num_channels_all[(block_str, recording_str)][stream_name] = sum([r.get_num_channels() for r in recording_list])
             else:
-                logging-info(f"Couldn't find job dict for {recording_name}")
+                logging.info(f"Couldn't find job dict for {recording_name}")
 
         # We first check the sampling frequencies across streams.
         # If sampling frequencies for different streams, do not write waveforms for the block/recording, because they
@@ -337,6 +340,11 @@ if __name__ == "__main__":
                             skip_times = job_dict.get("skip_times", False)
                             if skip_times:
                                 recording.reset_times()
+                            timestamps_file = timestamps_folder / f"{recording_name}.npy"
+                            if timestamps_file.is_file():
+                                logging.info(f"\tSetting synced timestamps from {timestamps_file}")
+                                timestamps = np.load(timestamps_file)
+                                recording.set_times(timestamps)
 
                             # Add device and electrode group
                             probe_device_name = None
