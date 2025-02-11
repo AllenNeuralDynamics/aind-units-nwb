@@ -1,9 +1,5 @@
 metadata_version: 1
-<<<<<<< HEAD
-name: NWB-Packaging-Units (dev)
-=======
-name: NWB Packaging Units
->>>>>>> fe64e4dc65b24a1e6de2ce209f47d557b06b534e
+name: NWB Packaging Units (dev)
 description: This specialized capsule is designed to append units information to a
   base NWB file, including spiking data and unit properties. In particular, it adds
   the Units table and several properties associated with the units, such as quality
@@ -12,7 +8,6 @@ description: This specialized capsule is designed to append units information to
   pair is produced.
 tags:
 - NWB
-- Ecephys
 authors:
 - name: AIND
 - name: Alessio Buccino
