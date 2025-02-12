@@ -54,6 +54,7 @@ if __name__ == "__main__":
         if p.is_dir()
         and ("ecephys" in p.name or "behavior" in p.name)
         and "sorted" not in p.name and "nwb" not in p.name
+        and "ecephys_clipped" not in p.name
     ]
     assert len(ecephys_folders) == 1, "Attach one ecephys folder at a time"
     ecephys_session_folder = ecephys_folders[0]
