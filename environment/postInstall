@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -e
+
+# fix loading of waveform-extractor
+git clone https://github.com/SpikeInterface/spikeinterface.git
+cd spikeinterface
+git checkout 27931b5dca994022724780fff9d0471d80022457
+pip install .[full]
+cd ..
