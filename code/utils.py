@@ -158,7 +158,14 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
                 for probe_name, probe_device in probe_devices.items():
                     if probe_name in assembly_name and probe_name not in devices:
                         devices[probe_name] = probe_device
-                        devices_target_location[probe_name] = ephys_module["primary_targeted_structure"]
+                        device_target_location = None
+                        primary_targeted_structure = ephys_module.get("primary_targeted_structure")
+                        if primary_targeted_structure is not None:
+                            if isinstance(primary_targeted_structure, dict):
+                                device_target_location = primary_targeted_structure.get("acronym")
+                            else:
+                                device_target_location = primary_targeted_structure
+                        devices_target_location[probe_name] = device_target_location
             if len(stimulus_device_names) > 0:
                 for stimulus_device_name in stimulus_device_names:
                     if stimulus_device_name in laser_devices and stimulus_device_name not in devices:
