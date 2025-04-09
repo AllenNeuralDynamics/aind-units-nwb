@@ -214,7 +214,7 @@ if __name__ == "__main__":
                 recording_num_channels[(block_str, recording_str)][(stream_name, group_str)] = recording.get_num_channels()
                 recording_num_channels_all[(block_str, recording_str)][stream_name] = sum([r.get_num_channels() for r in recording_list])
             else:
-                logging-info(f"Couldn't find job dict for {recording_name}")
+                logging.info(f"Couldn't find job dict for {recording_name}")
 
         # We first check the sampling frequencies across streams.
         # If sampling frequencies for different streams, do not write waveforms for the block/recording, because they
