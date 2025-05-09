@@ -453,7 +453,8 @@ if __name__ == "__main__":
                                     logging.info(f"Aggregating {len(recording_list)} for {recording_name}")
                                     recording = recording_all
 
-                            if len(recording_list) == 1:
+                            channel_groups = recording.get_channel_groups()
+                            if len(np.unique(channel_groups)) == 1:
                                 # single shank probe
                                 recording.set_channel_groups([probe_device_name] * recording.get_num_channels())
                                 electrode_groups_metadata = [
@@ -465,7 +466,6 @@ if __name__ == "__main__":
                                     )
                                 ]
                             else:
-                                channel_groups = recording.get_channel_groups()
                                 recording.set_channel_groups([f"{probe_device_name}_group{g}" for g in channel_groups])
                                 channel_groups = np.unique(recording.get_channel_groups())
                                 electrode_groups_metadata = [
