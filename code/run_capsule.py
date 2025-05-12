@@ -358,7 +358,6 @@ if __name__ == "__main__":
 
                             # if probe_device_name not found in metadata, use probes_info from recording
                             if probe_device_name is None:
-                                # if devices_from_rig not found in metadata, use probes_info from recording
                                 electrode_group_location = "unknown"
                                 probes_info = recording.get_annotation("probes_info", None)
                                 if probes_info is not None and len(probes_info) == 1:
@@ -392,6 +391,17 @@ if __name__ == "__main__":
                                 if probe_device_name not in nwbfile.devices:
                                     nwbfile.add_device(probe_device)
                                     logging.info(f"\tAdded probe device: {probe_device.name} from probeinterface")
+                            else:
+                                # deal with Quad Base: the rig.json has the same name for the different shanks
+                                # but we have to load the single-shank probe device name
+                                probes_info = recording.get_annotation("probes_info", None)
+                                if probes_info is not None and len(probes_info) == 1:
+                                    probe_info = probes_info[0]
+                                    model_name = probe_info.get("model_name")
+                                    if model_name is not None and "Quad Base" in model_name:
+                                        logging.info(f"Detected Quade Base: changing name from {probe_device_name} to {probe_info['name']}")
+                                        probe_device_name = probe_info["name"]
+
 
                             electrode_metadata = dict(
                                 Ecephys=dict(
