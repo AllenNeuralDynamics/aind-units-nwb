@@ -317,7 +317,6 @@ if __name__ == "__main__":
                                 recording_name += f"_{group_str}"
                                 stream_str += f"_{group_str}"
                             if not (curated_folder / recording_name).is_dir():
-                                logging.info(f"Curated units for {recording_name} not found.")
                                 continue
 
                             # load JSON and recordings
@@ -440,7 +439,11 @@ if __name__ == "__main__":
                             if unit_locations.shape[1] == 3:
                                 sorting_curated.set_property("estimated_z", unit_locations[:, 2])
                             sorting_curated.set_property("depth", unit_locations[:, 1])
-                            logging.info(f"\tAdding {len(sorting_curated.unit_ids)} units from stream {stream_name}")
+                            # add max_channel property
+                            extremum_channel_indices = list(si.get_template_extremum_channel(analyzer, outputs="index").values())
+                            sorting_curated.set_property("extremum_channel_index", extremum_channel_indices)
+
+                            logging.info(f"\tAdding {len(sorting_curated.unit_ids)} units from {recording_name}")
 
                             # Register recording for precise timestamps
                             sorting_curated.register_recording(recording)

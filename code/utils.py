@@ -274,8 +274,20 @@ def add_waveforms_with_uneven_channels(
         add_electrodes_info_to_nwbfile(recording, nwbfile=nwbfile, metadata=metadata)
     electrode_group_indices = _get_electrode_group_indices(recording, nwbfile=nwbfile)
 
+    available_nwb_groups = np.unique(nwbfile.electrodes["group_name"][:])
+    available_recording_groups = np.unique(recording.get_channel_groups())
+
     if write_waveforms:
-        unit_electrode_indices = [electrode_group_indices] * num_units
+        if len(electrode_group_indices) == 0:
+            print(
+                f"Could not find electrode group indices for templates: waveform_mean/sd will not be added to NWB.\n"
+                f"Groups in NWB: {available_nwb_groups} - Groups in recording: {available_recording_groups}."
+            )
+            template_means = None
+            template_stds = None
+            unit_electrode_indices = None
+        else:
+            unit_electrode_indices = [electrode_group_indices] * num_units
     else:
         unit_electrode_indices = None
 
