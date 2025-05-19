@@ -255,6 +255,7 @@ def add_waveforms_with_uneven_channels(
     else:
         template_means = None
         template_stds = None
+        unit_electrode_indices = None
 
     # metrics properties (quality, template) are added as properties to the sorting copy
     sorting_copy = sorting.select_units(unit_ids=sorting.unit_ids)
@@ -287,9 +288,7 @@ def add_waveforms_with_uneven_channels(
             template_stds = None
             unit_electrode_indices = None
         else:
-            unit_electrode_indices = [electrode_group_indices] * num_units
-    else:
-        unit_electrode_indices = None
+            unit_electrode_indices = [electrode_group_indices] * num_units        
 
     add_units_table_to_nwbfile(
         sorting=sorting_copy,

@@ -467,7 +467,7 @@ if __name__ == "__main__":
                                     recording = recording_all
 
                             channel_groups = recording.get_channel_groups()
-                            if len(np.unique(channel_groups)) == 1:
+                            if group_str == "":
                                 # single shank probe
                                 recording.set_channel_groups([probe_device_name] * recording.get_num_channels())
                                 electrode_groups_metadata = [
