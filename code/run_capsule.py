@@ -321,7 +321,6 @@ if __name__ == "__main__":
                                 recording_name += f"_{group_str}"
                                 stream_str += f"_{group_str}"
                             if not (curated_folder / recording_name).is_dir():
-                                logging.info(f"Curated units for {recording_name} not found.")
                                 continue
 
                             # load JSON and recordings
@@ -367,7 +366,6 @@ if __name__ == "__main__":
 
                             # if probe_device_name not found in metadata, use probes_info from recording
                             if probe_device_name is None:
-                                # if devices_from_rig not found in metadata, use probes_info from recording
                                 electrode_group_location = "unknown"
                                 probes_info = recording.get_annotation("probes_info", None)
                                 if probes_info is not None and len(probes_info) == 1:
@@ -401,6 +399,17 @@ if __name__ == "__main__":
                                 if probe_device_name not in nwbfile.devices:
                                     nwbfile.add_device(probe_device)
                                     logging.info(f"\tAdded probe device: {probe_device.name} from probeinterface")
+                            else:
+                                # deal with Quad Base: the rig.json has the same name for the different shanks
+                                # but we have to load the single-shank probe device name
+                                probes_info = recording.get_annotation("probes_info", None)
+                                if probes_info is not None and len(probes_info) == 1:
+                                    probe_info = probes_info[0]
+                                    model_name = probe_info.get("model_name")
+                                    if model_name is not None and "Quad Base" in model_name:
+                                        logging.info(f"Detected Quade Base: changing name from {probe_device_name} to {probe_info['name']}")
+                                        probe_device_name = probe_info["name"]
+
 
                             electrode_metadata = dict(
                                 Ecephys=dict(
@@ -439,7 +448,11 @@ if __name__ == "__main__":
                             if unit_locations.shape[1] == 3:
                                 sorting_curated.set_property("estimated_z", unit_locations[:, 2])
                             sorting_curated.set_property("depth", unit_locations[:, 1])
-                            logging.info(f"\tAdding {len(sorting_curated.unit_ids)} units from stream {stream_name}")
+                            # add max_channel property
+                            extremum_channel_indices = list(si.get_template_extremum_channel(analyzer, outputs="index").values())
+                            sorting_curated.set_property("extremum_channel_index", extremum_channel_indices)
+
+                            logging.info(f"\tAdding {len(sorting_curated.unit_ids)} units from {recording_name}")
 
                             # Register recording for precise timestamps
                             sorting_curated.register_recording(recording)
@@ -462,7 +475,8 @@ if __name__ == "__main__":
                                     logging.info(f"Aggregating {len(recording_list)} for {recording_name}")
                                     recording = recording_all
 
-                            if len(recording_list) == 1:
+                            channel_groups = recording.get_channel_groups()
+                            if group_str == "":
                                 # single shank probe
                                 recording.set_channel_groups([probe_device_name] * recording.get_num_channels())
                                 electrode_groups_metadata = [
@@ -474,7 +488,6 @@ if __name__ == "__main__":
                                     )
                                 ]
                             else:
-                                channel_groups = recording.get_channel_groups()
                                 recording.set_channel_groups([f"{probe_device_name}_group{g}" for g in channel_groups])
                                 channel_groups = np.unique(recording.get_channel_groups())
                                 electrode_groups_metadata = [

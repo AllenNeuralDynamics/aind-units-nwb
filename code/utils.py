@@ -158,7 +158,14 @@ def get_devices_from_rig_metadata(session_folder: str, segment_index: int = 0):
                 for probe_name, probe_device in probe_devices.items():
                     if probe_name in assembly_name and probe_name not in devices:
                         devices[probe_name] = probe_device
-                        devices_target_location[probe_name] = ephys_module["primary_targeted_structure"]
+                        device_target_location = None
+                        primary_targeted_structure = ephys_module.get("primary_targeted_structure")
+                        if primary_targeted_structure is not None:
+                            if isinstance(primary_targeted_structure, dict):
+                                device_target_location = primary_targeted_structure.get("acronym")
+                            else:
+                                device_target_location = primary_targeted_structure
+                        devices_target_location[probe_name] = device_target_location
             if len(stimulus_device_names) > 0:
                 for stimulus_device_name in stimulus_device_names:
                     if stimulus_device_name in laser_devices and stimulus_device_name not in devices:
@@ -248,6 +255,7 @@ def add_waveforms_with_uneven_channels(
     else:
         template_means = None
         template_stds = None
+        unit_electrode_indices = None
 
     # metrics properties (quality, template) are added as properties to the sorting copy
     sorting_copy = sorting.select_units(unit_ids=sorting.unit_ids)
@@ -267,10 +275,20 @@ def add_waveforms_with_uneven_channels(
         add_electrodes_info_to_nwbfile(recording, nwbfile=nwbfile, metadata=metadata)
     electrode_group_indices = _get_electrode_group_indices(recording, nwbfile=nwbfile)
 
+    available_nwb_groups = np.unique(nwbfile.electrodes["group_name"][:])
+    available_recording_groups = np.unique(recording.get_channel_groups())
+
     if write_waveforms:
-        unit_electrode_indices = [electrode_group_indices] * num_units
-    else:
-        unit_electrode_indices = None
+        if len(electrode_group_indices) == 0:
+            print(
+                f"Could not find electrode group indices for templates: waveform_mean/sd will not be added to NWB.\n"
+                f"Groups in NWB: {available_nwb_groups} - Groups in recording: {available_recording_groups}."
+            )
+            template_means = None
+            template_stds = None
+            unit_electrode_indices = None
+        else:
+            unit_electrode_indices = [electrode_group_indices] * num_units        
 
     add_units_table_to_nwbfile(
         sorting=sorting_copy,
