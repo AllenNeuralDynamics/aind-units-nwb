@@ -19,3 +19,6 @@ RUN pip install -U --no-cache-dir \
     s3fs==2025.5.1 \
     spikeinterface[full]==0.102.3 \
     wavpack-numcodecs==0.2.2
+
+COPY postInstall /
+RUN /postInstall
