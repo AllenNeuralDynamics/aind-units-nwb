@@ -8,7 +8,6 @@ description: This specialized capsule is designed to append units information to
   pair is produced.
 tags:
 - NWB
-- Ecephys
 authors:
 - name: AIND
 - name: Alessio Buccino

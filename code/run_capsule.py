@@ -54,6 +54,7 @@ if __name__ == "__main__":
         if p.is_dir()
         and ("ecephys" in p.name or "behavior" in p.name)
         and "sorted" not in p.name and "nwb" not in p.name
+        and "ecephys_clipped" not in p.name
     ]
     assert len(ecephys_folders) == 1, "Attach one ecephys folder at a time"
     ecephys_session_folder = ecephys_folders[0]
@@ -118,6 +119,9 @@ if __name__ == "__main__":
             recording_names_in_json.append(job_dict["recording_name"])
         job_dicts.append(job_dict)
     logging.info(f"Found {len(job_dicts)} JSON job files")
+
+    # check for timestamps to overwrite recording timestamps
+    timestamps_folder = data_folder / "timestamps"
 
     # find sorted data
     sorted_folders = [
@@ -336,6 +340,11 @@ if __name__ == "__main__":
                             skip_times = job_dict.get("skip_times", False)
                             if skip_times:
                                 recording.reset_times()
+                            timestamps_file = timestamps_folder / f"{recording_name}.npy"
+                            if timestamps_file.is_file():
+                                logging.info(f"\tSetting synced timestamps from {timestamps_file}")
+                                timestamps = np.load(timestamps_file)
+                                recording.set_times(timestamps)
 
                             # Add device and electrode group
                             probe_device_name = None
