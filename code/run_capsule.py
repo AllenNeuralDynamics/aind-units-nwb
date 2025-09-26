@@ -2,6 +2,7 @@
 import sys
 import shutil
 import json
+import argparse
 from pathlib import Path
 import numpy as np
 import logging
@@ -43,10 +44,31 @@ skip_unit_properties = [
     "Amplitude",
 ]
 
+parser = argparse.ArgumentParser(description="Export Units data to NWB")
+
+stub_group = parser.add_mutually_exclusive_group()
+stub_help = "Write a stub version for testing"
+stub_group.add_argument("--stub", action="store_true", help=stub_help)
+stub_group.add_argument("static_stub", nargs="?", default="false", help=stub_help)
+
+stub_units_group = parser.add_mutually_exclusive_group()
+stub_units_help = "Number of units for stub sorting"
+stub_units_group.add_argument("--stub-units", default=10, help=stub_units_help)
+stub_units_group.add_argument("static_stub_units", nargs="?", default="10", help=stub_units_help)
+
 
 if __name__ == "__main__":
     t_export_start = time.perf_counter()
 
+    # Add STUB option to reduce units/times
+    args = parser.parse_args()
+    stub = args.stub or args.static_stub
+    if args.stub:
+        STUB_TEST = True
+    else:
+        STUB_TEST = True if args.static_stub == "true" else False
+    STUB_UNITS = int(args.stub_units) or int(args.static_stub_units)
+    
     # find raw data
     ecephys_folders = [
         p
@@ -81,6 +103,9 @@ if __name__ == "__main__":
         logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
 
     logging.info("\n\nNWB EXPORT UNITS")
+    logging.info(f"Running NWB conversion with the following parameters:")
+    logging.info(f"Stub test: {STUB_TEST}")
+    logging.info(f"Stub units: {STUB_UNITS}")
 
     # find base NWB file
     nwb_files = [
@@ -110,7 +135,7 @@ if __name__ == "__main__":
                 shutil.copyfile(nwb_file_path, results_folder / nwb_file_path.name)
 
     # find raw data
-    job_json_files = [p for p in data_folder.iterdir() if p.suffix == ".json" and "job" in p.name]
+    job_json_files = [p for p in data_folder.glob('**/*.json') if "job" in p.name]
     job_dicts = []
     recording_names_in_json = []
     for job_json_file in job_json_files:
@@ -244,12 +269,12 @@ if __name__ == "__main__":
         # For case 3, we cannot write waveforms
         for key, num_channels in recording_num_channels.items():
             if write_waveforms[key]:
-                if len(np.unique(num_channels.values())) == 1:
+                if len(np.unique(list(num_channels.values()))) == 1:
                     write_waveforms[key] = True
                     aggregate_groups[key] = False
                 else:
                     for key_all, num_channels_all in recording_num_channels_all.items():
-                        if len(np.unique(num_channels_all.values())) == 1:
+                        if len(np.unique(list(num_channels_all.values()))) == 1:
                             write_waveforms[key] = True
                             aggregate_groups[key] = True
                         else:
@@ -406,7 +431,13 @@ if __name__ == "__main__":
                                 if probes_info is not None and len(probes_info) == 1:
                                     probe_info = probes_info[0]
                                     model_name = probe_info.get("model_name")
+                                    model_description = probe_info.get("description")
+                                    is_quad_base = False
                                     if model_name is not None and "Quad Base" in model_name:
+                                        is_quad_base = True
+                                    elif model_description is not None and "Quad Base" in model_description:
+                                        is_quad_base = True
+                                    if is_quad_base:
                                         logging.info(f"Detected Quade Base: changing name from {probe_device_name} to {probe_info['name']}")
                                         probe_device_name = probe_info["name"]
 
@@ -452,6 +483,12 @@ if __name__ == "__main__":
                             extremum_channel_indices = list(si.get_template_extremum_channel(analyzer, outputs="index").values())
                             sorting_curated.set_property("extremum_channel_index", extremum_channel_indices)
 
+                            if STUB_TEST:
+                                logging.info(f"\tSelecting {STUB_UNITS} units for testing")
+                                stub_unit_ids = sorting_curated.unit_ids[:STUB_UNITS]
+                                sorting_curated = sorting_curated.select_units(stub_unit_ids)
+                                analyzer = analyzer.select_units(stub_unit_ids)
+
                             logging.info(f"\tAdding {len(sorting_curated.unit_ids)} units from {recording_name}")
 
                             # Register recording for precise timestamps
@@ -470,10 +507,11 @@ if __name__ == "__main__":
                             recording_list = recordings_associated_to_recording_name[recording_name]
                             if aggregate_groups[(block_str, recording_str)]:
                                 # Add channel properties (group_name property to associate electrodes with group)
-                                recording_all = si.aggregate_channels(recording_list)
-                                if aggregate_groups[(block_str, recording_str)]:
+                                if aggregate_groups[(block_str, recording_str)] and len(recording_list) > 1:
                                     logging.info(f"Aggregating {len(recording_list)} for {recording_name}")
-                                    recording = recording_all
+                                    recording = si.aggregate_channels(recording_list)
+                                else:
+                                    recording = recording_list[0]
 
                             channel_groups = recording.get_channel_groups()
                             if group_str == "":
