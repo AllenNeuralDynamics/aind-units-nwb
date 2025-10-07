@@ -332,7 +332,7 @@ if __name__ == "__main__":
                         shutil.copyfile(nwbfile_input_path, nwbfile_output_path)
 
                 # Find probe devices (this will only work for AIND)
-                devices_from_rig, target_locations = get_ephys_devices_from_metadata(
+                deviced_from_metadata, target_locations = get_ephys_devices_from_metadata(
                     ecephys_session_folder
                 )
 
@@ -375,8 +375,8 @@ if __name__ == "__main__":
 
                             # Add device and electrode group
                             probe_device_name = None
-                            if devices_from_rig:
-                                for device_name, device in devices_from_rig.items():
+                            if deviced_from_metadata:
+                                for device_name, device in deviced_from_metadata.items():
                                     # add the device, since it could be a laser
                                     if device_name not in nwbfile.devices:
                                         nwbfile.add_device(device)
@@ -387,7 +387,7 @@ if __name__ == "__main__":
                                         electrode_group_location = target_locations.get(device_name, "unknown")
                                         probe_device = device
                                         logging.info(
-                                            f"Found device from rig: {device_name} at location {electrode_group_location}"
+                                            f"\tFound device from rig: {device_name} at location {electrode_group_location}"
                                         )
                                         break
 
