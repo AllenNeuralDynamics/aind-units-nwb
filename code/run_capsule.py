@@ -245,6 +245,8 @@ if __name__ == "__main__":
                                     probe_info = probes_info[0]
                                     probe_device_name = probe_info.get("name", None)
                                     probe_device_manufacturer = probe_info.get("manufacturer", None)
+                                    if probe_device_manufacturer is not None and isinstance(probe_device_manufacturer, dict):
+                                        probe_device_manufacturer = probe_device_manufacturer.get("abbreviation", None)
                                     probe_model_name = probe_info.get("model_name", None)
                                     probe_serial_number = probe_info.get("serial_number", None)
                                     probe_device_description = ""
