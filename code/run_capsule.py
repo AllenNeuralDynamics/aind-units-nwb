@@ -529,15 +529,15 @@ if __name__ == "__main__":
                                 ]
                             else:
                                 recording.set_channel_groups([f"{probe_device_name}_group{g}" for g in channel_groups])
-                                channel_groups = np.unique(recording.get_channel_groups())
+                                channel_groups_unique = np.unique(recording.get_channel_groups())
                                 electrode_groups_metadata = [
                                     dict(
-                                        name=f"{probe_device_name}_group{g}",
-                                        description=f"Recorded electrodes from probe {g}",
+                                        name=group,
+                                        description=f"Recorded electrodes from group {group}",
                                         location=electrode_group_location,
                                         device=probe_device_name,
                                     )
-                                    for g in channel_groups
+                                    for group in channel_groups_unique
                                 ]
                             electrode_metadata["Ecephys"]["ElectrodeGroup"] = electrode_groups_metadata
 
