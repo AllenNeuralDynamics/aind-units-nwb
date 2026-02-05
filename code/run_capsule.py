@@ -21,6 +21,8 @@ from pynwb import NWBHDF5IO
 from pynwb.file import Device
 from hdmf_zarr import NWBZarrIO
 
+from aind_nwb_utils.utils import get_ephys_devices_from_metadata
+
 # AIND
 try:
     from aind_log_utils import log
@@ -29,7 +31,7 @@ try:
 except ImportError:
     HAVE_AIND_LOG_UTILS = False
 
-from utils import get_devices_from_rig_metadata, add_waveforms_with_uneven_channels
+from utils import add_waveforms_with_uneven_channels
 
 
 data_folder = Path("../data")
@@ -330,8 +332,8 @@ if __name__ == "__main__":
                         shutil.copyfile(nwbfile_input_path, nwbfile_output_path)
 
                 # Find probe devices (this will only work for AIND)
-                devices_from_rig, target_locations = get_devices_from_rig_metadata(
-                    ecephys_session_folder, segment_index=segment_index
+                deviced_from_metadata, target_locations = get_ephys_devices_from_metadata(
+                    ecephys_session_folder
                 )
 
                 with io_class(str(nwbfile_output_path), "a") as append_io:
@@ -373,8 +375,8 @@ if __name__ == "__main__":
 
                             # Add device and electrode group
                             probe_device_name = None
-                            if devices_from_rig:
-                                for device_name, device in devices_from_rig.items():
+                            if deviced_from_metadata:
+                                for device_name, device in deviced_from_metadata.items():
                                     # add the device, since it could be a laser
                                     if device_name not in nwbfile.devices:
                                         nwbfile.add_device(device)
@@ -385,7 +387,7 @@ if __name__ == "__main__":
                                         electrode_group_location = target_locations.get(device_name, "unknown")
                                         probe_device = device
                                         logging.info(
-                                            f"Found device from rig: {device_name} at location {electrode_group_location}"
+                                            f"\tFound device from rig: {device_name} at location {electrode_group_location}"
                                         )
                                         break
 
