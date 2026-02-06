@@ -453,14 +453,30 @@ if __name__ == "__main__":
                             if (postprocessed_folder / f"{recording_name}.zarr").is_dir():
                                 # zarr format
                                 analyzer_folder = postprocessed_folder / f"{recording_name}.zarr"
-                            else:
+                            elif (postprocessed_folder / recording_name).is_dir():
                                 # binary format
                                 analyzer_folder = postprocessed_folder / recording_name
+                            else:
+                                logging.info(f"No analyzer found for {recording_name}")
+                                continue
 
                             analyzer = si.load(analyzer_folder, load_extensions=False)
 
                             # Load curated sorting and set properties
                             sorting_curated = si.load(curated_folder / recording_name)
+
+                            if len(analyzer.unit_ids) != len(np.unique(analyzer.unit_ids)):
+                                try:
+                                    analyzer.sorting = analyzer.sorting.rename_units(sorting_curated.unit_ids)
+                                    logging.info(
+                                        f"Wrong unit ids for analyzer for {recording_name}. "
+                                        "Resetting unit ids with curated sorting"
+                                    )
+                                except Exception as e:
+                                    logging.info(
+                                        f"Wrong unit ids and resetting units failed. Skipping {recording_name}"
+                                    )
+                                    continue
 
                             # Add unit properties (UUID and probe info, ks_unit_id)
                             unit_uuids = [str(uuid4()) for u in sorting_curated.unit_ids]
