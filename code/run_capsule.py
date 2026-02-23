@@ -453,14 +453,30 @@ if __name__ == "__main__":
                             if (postprocessed_folder / f"{recording_name}.zarr").is_dir():
                                 # zarr format
                                 analyzer_folder = postprocessed_folder / f"{recording_name}.zarr"
-                            else:
+                            elif (postprocessed_folder / recording_name).is_dir():
                                 # binary format
                                 analyzer_folder = postprocessed_folder / recording_name
+                            else:
+                                logging.info(f"No analyzer found for {recording_name}")
+                                continue
 
                             analyzer = si.load(analyzer_folder, load_extensions=False)
 
                             # Load curated sorting and set properties
                             sorting_curated = si.load(curated_folder / recording_name)
+
+                            if len(analyzer.unit_ids) != len(np.unique(analyzer.unit_ids)):
+                                try:
+                                    analyzer.sorting = analyzer.sorting.rename_units(sorting_curated.unit_ids)
+                                    logging.info(
+                                        f"Wrong unit ids for analyzer for {recording_name}. "
+                                        "Resetting unit ids with curated sorting"
+                                    )
+                                except Exception as e:
+                                    logging.info(
+                                        f"Wrong unit ids and resetting units failed. Skipping {recording_name}"
+                                    )
+                                    continue
 
                             # Add unit properties (UUID and probe info, ks_unit_id)
                             unit_uuids = [str(uuid4()) for u in sorting_curated.unit_ids]
@@ -529,15 +545,15 @@ if __name__ == "__main__":
                                 ]
                             else:
                                 recording.set_channel_groups([f"{probe_device_name}_group{g}" for g in channel_groups])
-                                channel_groups = np.unique(recording.get_channel_groups())
+                                channel_groups_unique = np.unique(recording.get_channel_groups())
                                 electrode_groups_metadata = [
                                     dict(
-                                        name=f"{probe_device_name}_group{g}",
-                                        description=f"Recorded electrodes from probe {g}",
+                                        name=group,
+                                        description=f"Recorded electrodes from group {group}",
                                         location=electrode_group_location,
                                         device=probe_device_name,
                                     )
-                                    for g in channel_groups
+                                    for group in channel_groups_unique
                                 ]
                             electrode_metadata["Ecephys"]["ElectrodeGroup"] = electrode_groups_metadata
 
