@@ -345,7 +345,8 @@ if __name__ == "__main__":
                             if group_str != "":
                                 recording_name += f"_{group_str}"
                                 stream_str += f"_{group_str}"
-                            if not (postprocessed_folder / recording_name).is_dir():
+                            if not (postprocessed_folder / f"{recording_name}.zarr").is_dir():
+                                logging.info(f"No postprocessed folder found for {recording_name}. Skipping")
                                 continue
 
                             # load JSON and recordings
