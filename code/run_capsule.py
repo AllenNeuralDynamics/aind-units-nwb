@@ -583,6 +583,17 @@ if __name__ == "__main__":
                     logging.info(f"Done writing {nwbfile_output_path}")
                     nwb_output_files.append(nwbfile_output_path)
 
+    if len(nwb_output_files) == 0:
+        logging.info("No units were added to NWB files. Copying input NWB files to results without modifications.")
+        for nwbfile_input_path in nwb_files:
+            nwbfile_output_path = results_folder / nwbfile_input_path.name
+            shutil.copy(nwbfile_input_path, nwbfile_output_path)
+            logging.info(f"\tCopied {nwbfile_input_path} to {nwbfile_output_path}")
+    else:
+        logging.info(f"Units were added to {len(nwb_output_files)} NWB files:")
+        for nwb_output_file in nwb_output_files:
+            logging.info(f"\t{nwb_output_file.name}")
+
     t_export_end = time.perf_counter()
     elapsed_time_export = np.round(t_export_end - t_export_start, 2)
     logging.info(f"NWB EXPORT UNITS time: {elapsed_time_export}s")
