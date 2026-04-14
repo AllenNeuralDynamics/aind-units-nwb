@@ -326,8 +326,8 @@ if __name__ == "__main__":
                     nwbfile_output_path = results_folder / nwb_file_name
 
                     # copy nwb input file to results to read in append mode
-                    if NWB_BACKEND == "zarr" and not not nwbfile_output_path.is_dir():
-                        shutil.copytree(nwb_file_path, results_folder / nwb_file_path.name)
+                    if NWB_BACKEND == "zarr" and not nwbfile_output_path.is_dir():
+                        shutil.copytree(nwbfile_input_path, nwbfile_output_path)
                     elif not nwbfile_output_path.is_file():  # HDF5
                         shutil.copyfile(nwbfile_input_path, nwbfile_output_path)
 
