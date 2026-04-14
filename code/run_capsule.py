@@ -116,10 +116,10 @@ if __name__ == "__main__":
         if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")) and "/nwb/" not in str(p)
     ]
     assert len(nwb_files) > 0, "Attach at least one base NWB file"
-    nwbfile_input_path = nwb_files[0]
+    nwb_file0 = nwb_files[0]
 
-    if nwbfile_input_path.is_dir():
-        assert (nwbfile_input_path / ".zattrs").is_file(), f"{nwbfile_input_path.name} is not a valid Zarr folder"
+    if nwb_file0.is_dir():
+        assert (nwb_file0 / ".zattrs").is_file(), f"{nwb_file0.name} is not a valid Zarr folder"
         NWB_BACKEND = "zarr"
         io_class = NWBZarrIO
     else:
@@ -127,14 +127,13 @@ if __name__ == "__main__":
         io_class = NWBHDF5IO
     logging.info(f"NWB backend: {NWB_BACKEND}")
 
-    # if more than 1 input NWB files, we copy them all to the results
-    # since some processing might have failed
-    if len(nwb_files) > 1:
-        for nwb_file_path in nwb_files:
-            if nwb_file_path.is_dir():
-                shutil.copytree(nwb_file_path, results_folder / nwb_file_path.name)
-            else:
-                shutil.copyfile(nwb_file_path, results_folder / nwb_file_path.name)
+    # start by copying NWB files to results folder, since we will write in append mode
+    # and we want to avoid modifying input files in place
+    for nwb_file_path in nwb_files:
+        if NWB_BACKEND == "zarr":
+            shutil.copytree(nwb_file_path, results_folder / nwb_file_path.name)
+        else:  # HDF5
+            shutil.copyfile(nwb_file_path, results_folder / nwb_file_path.name)
 
     # find raw data
     job_json_files = [p for p in data_folder.glob('**/*.json') if "job" in p.name]
@@ -318,6 +317,7 @@ if __name__ == "__main__":
                     nwbfile_output_path = results_folder / f"{nwbfile_input_path.stem}.nwb"
                     # in this case the nwb files have been already copied to the results folder
                 else:
+                    nwbfile_input_path = nwb_files[0]
                     nwb_original_file_name = nwbfile_input_path.stem
                     if block_str in nwb_original_file_name and recording_str in nwb_original_file_name:
                         nwb_file_name = f"{nwb_original_file_name}.nwb"
@@ -326,9 +326,9 @@ if __name__ == "__main__":
                     nwbfile_output_path = results_folder / nwb_file_name
 
                     # copy nwb input file to results to read in append mode
-                    if nwbfile_input_path.is_dir():
-                        shutil.copytree(nwbfile_input_path, nwbfile_output_path)
-                    else:
+                    if NWB_BACKEND == "zarr" and not not nwbfile_output_path.is_dir():
+                        shutil.copytree(nwb_file_path, results_folder / nwb_file_path.name)
+                    elif not nwbfile_output_path.is_file():  # HDF5
                         shutil.copyfile(nwbfile_input_path, nwbfile_output_path)
 
                 # Find probe devices (this will only work for AIND)
