@@ -326,10 +326,12 @@ if __name__ == "__main__":
                     nwbfile_output_path = results_folder / nwb_file_name
 
                     # copy nwb input file to results to read in append mode
-                    if NWB_BACKEND == "zarr" and not nwbfile_output_path.is_dir():
-                        shutil.copytree(nwbfile_input_path, nwbfile_output_path)
-                    elif not nwbfile_output_path.is_file():  # HDF5
-                        shutil.copyfile(nwbfile_input_path, nwbfile_output_path)
+                    if NWB_BACKEND == "zarr":
+                        if not nwbfile_output_path.is_dir():
+                            shutil.copytree(nwbfile_input_path, nwbfile_output_path)
+                    else:  # HDF5
+                        if not nwbfile_output_path.is_file():
+                            shutil.copyfile(nwbfile_input_path, nwbfile_output_path)
 
                 # Find probe devices (this will only work for AIND)
                 deviced_from_metadata, target_locations = get_ephys_devices_from_metadata(
