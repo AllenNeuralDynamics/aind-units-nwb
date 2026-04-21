@@ -336,7 +336,6 @@ if __name__ == "__main__":
                     nwbfile = append_io.read()
 
                     added_stream_names = []
-                    probe_device_names = []
                     for stream_index, stream_name in enumerate(streams_to_process):
                         stream_str = str(stream_name)
                         for group_str in group_ids:
@@ -426,9 +425,6 @@ if __name__ == "__main__":
                                 if len(probe_device_description) > 0:
                                     probe_device_description += " - "
                                 probe_device_description += f"Description: {probe_description}"
-                            # this is needed to account for a case where multiple streams have the same device name
-                            if len(streams_to_process) > 1 and probe_device_name in probe_device_names:
-                                probe_device_name = f"{probe_device_name}-{stream_index}"
                             probe_device = Device(
                                 name=probe_device_name,
                                 description=probe_device_description,
@@ -437,7 +433,6 @@ if __name__ == "__main__":
                             if probe_device_name not in nwbfile.devices:
                                 nwbfile.add_device(probe_device)
                                 logging.info(f"\tAdded probe device: {probe_device.name} - {probe_device.description}")
-                            probe_device_names.append(probe_device_name)
 
                             # Add electrode metadats
                             electrode_metadata = dict(
