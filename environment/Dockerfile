@@ -1,4 +1,4 @@
-# hash:sha256:a51ac5a958c24a768280f851310d1486b6c566ff894dc89da8e546106c2fa2bc
+# hash:sha256:2bd6706401783f1262e30b3f7fcaeaefc6d47ffa007ae28d7c6f40c22a11741d
 ARG REGISTRY_HOST
 FROM $REGISTRY_HOST/codeocean/mambaforge3:24.5.0-0-python3.12.4-ubuntu22.04
 
@@ -18,10 +18,10 @@ RUN conda install -y \
 RUN pip install -U --no-cache-dir \
     aind-log-utils==0.2.3 \
     aind-nwb-utils==0.1.1 \
-    hdmf==4.1.0 \
-    hdmf-zarr==0.11.0 \
-    neuroconv==0.7.1 \
-    pynwb==2.8.3 \
+    hdmf==4.3.1 \
+    hdmf-zarr==0.12.0 \
+    neuroconv==0.9.3 \
+    pynwb==3.1.3 \
     s3fs==2025.5.1 \
-    spikeinterface[full]==0.104.0 \
+    spikeinterface[full]==0.104.2 \
     wavpack-numcodecs==0.2.2

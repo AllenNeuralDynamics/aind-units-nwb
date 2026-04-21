@@ -13,10 +13,6 @@ import time
 import probeinterface as pi
 import spikeinterface as si
 
-# needed to lead extensions
-import spikeinterface.postprocessing as spost
-import spikeinterface.qualitymetrics as sqm
-
 from pynwb import NWBHDF5IO
 from pynwb.file import Device
 from hdmf_zarr import NWBZarrIO
