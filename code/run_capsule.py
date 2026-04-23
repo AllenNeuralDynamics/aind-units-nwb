@@ -116,10 +116,10 @@ if __name__ == "__main__":
         if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")) and "/nwb/" not in str(p)
     ]
     assert len(nwb_files) > 0, "Attach at least one base NWB file"
-    nwbfile_input_path = nwb_files[0]
+    nwb_file0 = nwb_files[0]
 
-    if nwbfile_input_path.is_dir():
-        assert (nwbfile_input_path / ".zattrs").is_file(), f"{nwbfile_input_path.name} is not a valid Zarr folder"
+    if nwb_file0.is_dir():
+        assert (nwb_file0 / ".zattrs").is_file(), f"{nwb_file0.name} is not a valid Zarr folder"
         NWB_BACKEND = "zarr"
         io_class = NWBZarrIO
     else:
@@ -127,14 +127,13 @@ if __name__ == "__main__":
         io_class = NWBHDF5IO
     logging.info(f"NWB backend: {NWB_BACKEND}")
 
-    # if more than 1 input NWB files, we copy them all to the results
-    # since some processing might have failed
-    if len(nwb_files) > 1:
-        for nwb_file_path in nwb_files:
-            if nwb_file_path.is_dir():
-                shutil.copytree(nwb_file_path, results_folder / nwb_file_path.name)
-            else:
-                shutil.copyfile(nwb_file_path, results_folder / nwb_file_path.name)
+    # start by copying NWB files to results folder, since we will write in append mode
+    # and we want to avoid modifying input files in place
+    for nwb_file_path in nwb_files:
+        if NWB_BACKEND == "zarr":
+            shutil.copytree(nwb_file_path, results_folder / nwb_file_path.name)
+        else:  # HDF5
+            shutil.copyfile(nwb_file_path, results_folder / nwb_file_path.name)
 
     # find raw data
     job_json_files = [p for p in data_folder.glob('**/*.json') if "job" in p.name]
@@ -318,6 +317,7 @@ if __name__ == "__main__":
                     nwbfile_output_path = results_folder / f"{nwbfile_input_path.stem}.nwb"
                     # in this case the nwb files have been already copied to the results folder
                 else:
+                    nwbfile_input_path = nwb_files[0]
                     nwb_original_file_name = nwbfile_input_path.stem
                     if block_str in nwb_original_file_name and recording_str in nwb_original_file_name:
                         nwb_file_name = f"{nwb_original_file_name}.nwb"
@@ -326,10 +326,12 @@ if __name__ == "__main__":
                     nwbfile_output_path = results_folder / nwb_file_name
 
                     # copy nwb input file to results to read in append mode
-                    if nwbfile_input_path.is_dir():
-                        shutil.copytree(nwbfile_input_path, nwbfile_output_path)
-                    else:
-                        shutil.copyfile(nwbfile_input_path, nwbfile_output_path)
+                    if NWB_BACKEND == "zarr":
+                        if not nwbfile_output_path.is_dir():
+                            shutil.copytree(nwbfile_input_path, nwbfile_output_path)
+                    else:  # HDF5
+                        if not nwbfile_output_path.is_file():
+                            shutil.copyfile(nwbfile_input_path, nwbfile_output_path)
 
                 # Find probe devices (this will only work for AIND)
                 deviced_from_metadata, target_locations = get_ephys_devices_from_metadata(
@@ -453,14 +455,30 @@ if __name__ == "__main__":
                             if (postprocessed_folder / f"{recording_name}.zarr").is_dir():
                                 # zarr format
                                 analyzer_folder = postprocessed_folder / f"{recording_name}.zarr"
-                            else:
+                            elif (postprocessed_folder / recording_name).is_dir():
                                 # binary format
                                 analyzer_folder = postprocessed_folder / recording_name
+                            else:
+                                logging.info(f"No analyzer found for {recording_name}")
+                                continue
 
                             analyzer = si.load(analyzer_folder, load_extensions=False)
 
                             # Load curated sorting and set properties
                             sorting_curated = si.load(curated_folder / recording_name)
+
+                            if len(analyzer.unit_ids) != len(np.unique(analyzer.unit_ids)):
+                                try:
+                                    analyzer.sorting = analyzer.sorting.rename_units(sorting_curated.unit_ids)
+                                    logging.info(
+                                        f"Wrong unit ids for analyzer for {recording_name}. "
+                                        "Resetting unit ids with curated sorting"
+                                    )
+                                except Exception as e:
+                                    logging.info(
+                                        f"Wrong unit ids and resetting units failed. Skipping {recording_name}"
+                                    )
+                                    continue
 
                             # Add unit properties (UUID and probe info, ks_unit_id)
                             unit_uuids = [str(uuid4()) for u in sorting_curated.unit_ids]
@@ -529,15 +547,15 @@ if __name__ == "__main__":
                                 ]
                             else:
                                 recording.set_channel_groups([f"{probe_device_name}_group{g}" for g in channel_groups])
-                                channel_groups = np.unique(recording.get_channel_groups())
+                                channel_groups_unique = np.unique(recording.get_channel_groups())
                                 electrode_groups_metadata = [
                                     dict(
-                                        name=f"{probe_device_name}_group{g}",
-                                        description=f"Recorded electrodes from probe {g}",
+                                        name=group,
+                                        description=f"Recorded electrodes from group {group}",
                                         location=electrode_group_location,
                                         device=probe_device_name,
                                     )
-                                    for g in channel_groups
+                                    for group in channel_groups_unique
                                 ]
                             electrode_metadata["Ecephys"]["ElectrodeGroup"] = electrode_groups_metadata
 
