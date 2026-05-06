@@ -167,7 +167,6 @@ if __name__ == "__main__":
 
     postprocessed_folder = sorted_folder / "postprocessed"
     spikesorted_folder = sorted_folder / "spikesorted"
-    curated_folder = sorted_folder / "curated"
     if not postprocessed_folder.is_dir():
         logging.info("Postprocessed folder not found. Skipping NWB export")
         # create dummy nwb folder to avoid pipeline failure
@@ -460,13 +459,7 @@ if __name__ == "__main__":
                                 continue
 
                             analyzer = si.load(analyzer_folder, load_extensions=False)
-
-                            # Load curated sorting and set properties
-                            if (curated_folder / recording_name).is_dir():
-                                logging.info(f"\tLoading curated sorting for {recording_name}")
-                                sorting_curated = si.load(curated_folder / recording_name)
-                            else:
-                                sorting_curated = analyzer.sorting
+                            sorting_curated = analyzer.sorting
 
                             if len(analyzer.unit_ids) != len(np.unique(analyzer.unit_ids)):
                                 try:
