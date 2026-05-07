@@ -166,7 +166,6 @@ if __name__ == "__main__":
         sorted_folder = sorted_folders[0]
 
     postprocessed_folder = sorted_folder / "postprocessed"
-    curated_folder = sorted_folder / "curated"
     spikesorted_folder = sorted_folder / "spikesorted"
     if not postprocessed_folder.is_dir():
         logging.info("Postprocessed folder not found. Skipping NWB export")
@@ -174,11 +173,9 @@ if __name__ == "__main__":
         error_txt = results_folder / "error.txt"
         error_txt.write_text("Postprocessed folder not found. No NWB files were created.")
     else:
-        assert curated_folder.is_dir(), f"Curated folder {curated_folder} does not exist"
-        assert spikesorted_folder.is_dir(), f"Spikesorted folder {spikesorted_folder} does not exist"
-
-        # we create a result NWB file for each experiment/recording
-        recording_names = sorted([p.name for p in curated_folder.iterdir() if p.is_dir()])
+        # we create a result NWB file for each experiment/recording# we create a result NWB file for each experiment/recording
+        postprocessed_folders = sorted([p.name for p in postprocessed_folder.iterdir() if p.is_dir()])
+        recording_names = [p[:p.find(".zarr")] if p.endswith(".zarr") else p for p in postprocessed_folders]
         logging.info(f"Found {len(recording_names)} processed recordings")
 
         # find blocks and recordings
@@ -349,7 +346,7 @@ if __name__ == "__main__":
                             if group_str != "":
                                 recording_name += f"_{group_str}"
                                 stream_str += f"_{group_str}"
-                            if not (curated_folder / recording_name).is_dir():
+                            if not (postprocessed_folder / recording_name).is_dir():
                                 continue
 
                             # load JSON and recordings
@@ -365,7 +362,7 @@ if __name__ == "__main__":
                             added_stream_names.append(stream_str)
 
                             # load associated recordings
-                            recording = si.load(job_dict["recording_dict"], base_folder=data_folder)
+                            recording = si.load(recording_job_dict["recording_dict"], base_folder=data_folder)
                             skip_times = job_dict.get("skip_times", False)
                             if skip_times:
                                 recording.reset_times()
@@ -463,9 +460,7 @@ if __name__ == "__main__":
                                 continue
 
                             analyzer = si.load(analyzer_folder, load_extensions=False)
-
-                            # Load curated sorting and set properties
-                            sorting_curated = si.load(curated_folder / recording_name)
+                            sorting_curated = analyzer.sorting
 
                             if len(analyzer.unit_ids) != len(np.unique(analyzer.unit_ids)):
                                 try:
