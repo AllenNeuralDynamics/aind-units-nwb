@@ -173,8 +173,9 @@ if __name__ == "__main__":
         error_txt = results_folder / "error.txt"
         error_txt.write_text("Postprocessed folder not found. No NWB files were created.")
     else:
-        # we create a result NWB file for each experiment/recording
-        recording_names = sorted([p.name for p in postprocessed_folder.iterdir() if p.is_dir()])
+        # we create a result NWB file for each experiment/recording# we create a result NWB file for each experiment/recording
+        postprocessed_folders = sorted([p.name for p in postprocessed_folder.iterdir() if p.is_dir()])
+        recording_names = [p[:p.find(".zarr")] if p.endswith(".zarr") else p for p in postprocessed_folders]
         logging.info(f"Found {len(recording_names)} processed recordings")
 
         # find blocks and recordings
