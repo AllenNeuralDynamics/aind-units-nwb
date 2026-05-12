@@ -372,13 +372,10 @@ if __name__ == "__main__":
                                 timestamps = np.load(timestamps_file)
                                 recording.set_times(timestamps)
 
-                            # Add device and electrode group
+                            # Find device and electrode group
                             probe_device_name = None
                             if deviced_from_metadata:
                                 for device_name, device in deviced_from_metadata.items():
-                                    # add the device, since it could be a laser
-                                    if device_name not in nwbfile.devices:
-                                        nwbfile.add_device(device)
                                     # find probe device name
                                     probe_no_spaces = device_name.replace(" ", "")
                                     if probe_no_spaces in stream_name:
@@ -397,34 +394,15 @@ if __name__ == "__main__":
                                 if probes_info is not None and len(probes_info) == 1:
                                     probe_info = probes_info[0]
                                     probe_device_name = probe_info.get("name", None)
-                                    probe_device_manufacturer = probe_info.get("manufacturer", None)
-                                    probe_model_name = probe_info.get("model_name", None)
-                                    probe_serial_number = probe_info.get("serial_number", None)
-                                    probe_device_description = ""
                                     if probe_device_name is None:
                                         if probe_model_name is not None:
                                             probe_device_name = probe_model_name
                                         else:
                                             probe_device_name = "Probe"
-                                    if probe_model_name is not None:
-                                        probe_device_description += f"Model: {probe_device_description}"
-                                    if probe_serial_number is not None:
-                                        if len(probe_device_description) > 0:
-                                            probe_device_description += " - "
-                                        probe_device_description += f"Serial number: {probe_serial_number}"
-                                    probe_device = Device(
-                                        name=probe_device_name,
-                                        description=probe_device_description,
-                                        manufacturer=probe_device_manufacturer,
-                                    )
                                 else:
                                     logging.info("\tCould not load device information: using default Device")
                                     probe_device_name = "Device"
                                     probe_device = Device(name=probe_device_name, description="Default device")
-
-                                if probe_device_name not in nwbfile.devices:
-                                    nwbfile.add_device(probe_device)
-                                    logging.info(f"\tAdded probe device: {probe_device.name} from probeinterface")
                             else:
                                 # deal with Quad Base: the rig.json has the same name for the different shanks
                                 # but we have to load the single-shank probe device name
@@ -441,7 +419,6 @@ if __name__ == "__main__":
                                     if is_quad_base:
                                         logging.info(f"Detected Quade Base: changing name from {probe_device_name} to {probe_info['name']}")
                                         probe_device_name = probe_info["name"]
-
 
                             electrode_metadata = dict(
                                 Ecephys=dict(
