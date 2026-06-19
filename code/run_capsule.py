@@ -395,6 +395,7 @@ if __name__ == "__main__":
                                 if probes_info is not None and len(probes_info) == 1:
                                     probe_info = probes_info[0]
                                     probe_device_name = probe_info.get("name", None)
+                                    probe_model_name = probe_info.get("model_name", None)
                                     if probe_device_name is None:
                                         if probe_model_name is not None:
                                             probe_device_name = probe_model_name
