@@ -11,10 +11,6 @@ RUN apt-get update \
         build-essential=12.9ubuntu3 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN conda install -y \
-        jupyterlab==4.4.9 \
-    && conda clean -ya
-
 RUN pip install -U --no-cache-dir \
     aind-log-utils==0.2.3 \
     aind-nwb-utils==0.1.1 \
