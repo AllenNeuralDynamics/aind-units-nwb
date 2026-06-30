@@ -129,4 +129,7 @@ def add_waveforms_with_uneven_channels(
         waveform_means=template_means,
         waveform_sds=template_stds,
         unit_electrode_indices=unit_electrode_indices,
+        waveform_rate=sorting_copy.sampling_frequency,
+        waveform_unit="microvolts",
+        resolution=1.0 / sorting_copy.sampling_frequency
     )
