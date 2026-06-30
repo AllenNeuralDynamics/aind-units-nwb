@@ -29,8 +29,8 @@ def add_waveforms_with_uneven_channels(
     with zeros.
     """
     from neuroconv.tools.spikeinterface.spikeinterface import (
-        add_electrodes_info_to_nwbfile,
-        add_units_table_to_nwbfile,
+        add_electrodes_to_nwbfile,
+        _add_units_table_to_nwbfile,
         _get_electrode_group_indices,
     )
 
@@ -71,22 +71,35 @@ def add_waveforms_with_uneven_channels(
         template_stds = None
         unit_electrode_indices = None
 
+    if unit_ids is None:
+        unit_ids = sorting_analyzer.unit_ids
+
     # metrics properties (quality, template) are added as properties to the sorting copy
-    sorting_copy = sorting.select_units(unit_ids=sorting.unit_ids)
+    sorting_copy = sorting.select_units(unit_ids=unit_ids)
+    property_descriptions = property_descriptions or {}
+
     if sorting_analyzer.has_extension("quality_metrics"):
-        qm = sorting_analyzer.get_extension("quality_metrics").get_data()
-        for prop in qm.columns:
+        qm_ext = sorting_analyzer.get_extension("quality_metrics")
+        qm_df = qm_ext.get_data()
+        qm_descriptions = qm_ext.get_metric_column_descriptions()
+
+        for prop in qm_df.columns:
             if prop not in sorting_copy.get_property_keys():
-                sorting_copy.set_property(prop, qm[prop])
+                sorting_copy.set_property(prop, qm_df.loc[unit_ids, prop].values)
+                property_descriptions.update({prop: qm_descriptions.get(prop, "No description.")})
+
     if sorting_analyzer.has_extension("template_metrics"):
-        tm = sorting_analyzer.get_extension("template_metrics").get_data()
-        for prop in tm.columns:
+        tm_ext = sorting_analyzer.get_extension("template_metrics")
+        tm_df = tm_ext.get_data()
+        tm_descriptions = tm_ext.get_metric_column_descriptions()
+        for prop in tm_df.columns:
             if prop not in sorting_copy.get_property_keys():
-                sorting_copy.set_property(prop, tm[prop])
+                sorting_copy.set_property(prop, tm_df.loc[unit_ids, prop].values)
+                property_descriptions.update({prop: tm_descriptions.get(prop, "No description.")})
 
     # add electrodes only if needed
     if nwbfile.electrodes is None and write_waveforms:
-        add_electrodes_info_to_nwbfile(recording, nwbfile=nwbfile, metadata=metadata)
+        add_electrodes_to_nwbfile(recording, nwbfile=nwbfile, metadata=metadata)
     electrode_group_indices = _get_electrode_group_indices(recording, nwbfile=nwbfile)
 
     available_nwb_groups = np.unique(nwbfile.electrodes["group_name"][:])
@@ -104,7 +117,7 @@ def add_waveforms_with_uneven_channels(
         else:
             unit_electrode_indices = [electrode_group_indices] * num_units        
 
-    add_units_table_to_nwbfile(
+    _add_units_table_to_nwbfile(
         sorting=sorting_copy,
         nwbfile=nwbfile,
         unit_ids=unit_ids,

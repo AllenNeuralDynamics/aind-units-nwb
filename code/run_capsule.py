@@ -13,10 +13,6 @@ import time
 import probeinterface as pi
 import spikeinterface as si
 
-# needed to lead extensions
-import spikeinterface.postprocessing as spost
-import spikeinterface.qualitymetrics as sqm
-
 from pynwb import NWBHDF5IO
 from pynwb.file import Device
 from hdmf_zarr import NWBZarrIO
@@ -116,10 +112,10 @@ if __name__ == "__main__":
         if (p.name.endswith(".nwb") or p.name.endswith(".nwb.zarr")) and "/nwb/" not in str(p)
     ]
     assert len(nwb_files) > 0, "Attach at least one base NWB file"
-    nwbfile_input_path = nwb_files[0]
+    nwb_file0 = nwb_files[0]
 
-    if nwbfile_input_path.is_dir():
-        assert (nwbfile_input_path / ".zattrs").is_file(), f"{nwbfile_input_path.name} is not a valid Zarr folder"
+    if nwb_file0.is_dir():
+        assert (nwb_file0 / ".zattrs").is_file(), f"{nwb_file0.name} is not a valid Zarr folder"
         NWB_BACKEND = "zarr"
         io_class = NWBZarrIO
     else:
@@ -127,14 +123,13 @@ if __name__ == "__main__":
         io_class = NWBHDF5IO
     logging.info(f"NWB backend: {NWB_BACKEND}")
 
-    # if more than 1 input NWB files, we copy them all to the results
-    # since some processing might have failed
-    if len(nwb_files) > 1:
-        for nwb_file_path in nwb_files:
-            if nwb_file_path.is_dir():
-                shutil.copytree(nwb_file_path, results_folder / nwb_file_path.name)
-            else:
-                shutil.copyfile(nwb_file_path, results_folder / nwb_file_path.name)
+    # start by copying NWB files to results folder, since we will write in append mode
+    # and we want to avoid modifying input files in place
+    for nwb_file_path in nwb_files:
+        if NWB_BACKEND == "zarr":
+            shutil.copytree(nwb_file_path, results_folder / nwb_file_path.name)
+        else:  # HDF5
+            shutil.copyfile(nwb_file_path, results_folder / nwb_file_path.name)
 
     # find raw data
     job_json_files = [p for p in data_folder.glob('**/*.json') if "job" in p.name]
@@ -167,7 +162,6 @@ if __name__ == "__main__":
         sorted_folder = sorted_folders[0]
 
     postprocessed_folder = sorted_folder / "postprocessed"
-    curated_folder = sorted_folder / "curated"
     spikesorted_folder = sorted_folder / "spikesorted"
     if not postprocessed_folder.is_dir():
         logging.info("Postprocessed folder not found. Skipping NWB export")
@@ -175,11 +169,9 @@ if __name__ == "__main__":
         error_txt = results_folder / "error.txt"
         error_txt.write_text("Postprocessed folder not found. No NWB files were created.")
     else:
-        assert curated_folder.is_dir(), f"Curated folder {curated_folder} does not exist"
-        assert spikesorted_folder.is_dir(), f"Spikesorted folder {spikesorted_folder} does not exist"
-
-        # we create a result NWB file for each experiment/recording
-        recording_names = sorted([p.name for p in curated_folder.iterdir() if p.is_dir()])
+        # we create a result NWB file for each experiment/recording# we create a result NWB file for each experiment/recording
+        postprocessed_folders = sorted([p.name for p in postprocessed_folder.iterdir() if p.is_dir()])
+        recording_names = [p[:p.find(".zarr")] if p.endswith(".zarr") else p for p in postprocessed_folders]
         logging.info(f"Found {len(recording_names)} processed recordings")
 
         # find blocks and recordings
@@ -288,10 +280,10 @@ if __name__ == "__main__":
 
         block_ids = sorted(block_ids)
         recording_ids = sorted(recording_ids)
-        stream_names = sorted(stream_names)
+        streams_to_process = sorted(stream_names)
 
         logging.info(f"Number of NWB files to write: {len(block_ids) * len(recording_ids)}")
-        logging.info(f"Number of streams to write for each file: {len(stream_names)}")
+        logging.info(f"Number of streams to write for each file: {len(streams_to_process)}")
 
         nwb_output_files = []
         multi_input_files = False
@@ -318,6 +310,7 @@ if __name__ == "__main__":
                     nwbfile_output_path = results_folder / f"{nwbfile_input_path.stem}.nwb"
                     # in this case the nwb files have been already copied to the results folder
                 else:
+                    nwbfile_input_path = nwb_files[0]
                     nwb_original_file_name = nwbfile_input_path.stem
                     if block_str in nwb_original_file_name and recording_str in nwb_original_file_name:
                         nwb_file_name = f"{nwb_original_file_name}.nwb"
@@ -326,13 +319,15 @@ if __name__ == "__main__":
                     nwbfile_output_path = results_folder / nwb_file_name
 
                     # copy nwb input file to results to read in append mode
-                    if nwbfile_input_path.is_dir():
-                        shutil.copytree(nwbfile_input_path, nwbfile_output_path)
-                    else:
-                        shutil.copyfile(nwbfile_input_path, nwbfile_output_path)
+                    if NWB_BACKEND == "zarr":
+                        if not nwbfile_output_path.is_dir():
+                            shutil.copytree(nwbfile_input_path, nwbfile_output_path)
+                    else:  # HDF5
+                        if not nwbfile_output_path.is_file():
+                            shutil.copyfile(nwbfile_input_path, nwbfile_output_path)
 
                 # Find probe devices (this will only work for AIND)
-                deviced_from_metadata, target_locations = get_ephys_devices_from_metadata(
+                devices_from_metadata, target_locations = get_ephys_devices_from_metadata(
                     ecephys_session_folder
                 )
 
@@ -340,14 +335,15 @@ if __name__ == "__main__":
                     nwbfile = append_io.read()
 
                     added_stream_names = []
-                    for stream_name in stream_names:
+                    for stream_index, stream_name in enumerate(streams_to_process):
                         stream_str = str(stream_name)
                         for group_str in group_ids:
                             recording_name = f"{block_str}_{stream_name}_{recording_str}"
                             if group_str != "":
                                 recording_name += f"_{group_str}"
                                 stream_str += f"_{group_str}"
-                            if not (curated_folder / recording_name).is_dir():
+                            if not (postprocessed_folder / f"{recording_name}.zarr").is_dir():
+                                logging.info(f"Postprocessed folder not found for {recording_name}")
                                 continue
 
                             # load JSON and recordings
@@ -363,7 +359,7 @@ if __name__ == "__main__":
                             added_stream_names.append(stream_str)
 
                             # load associated recordings
-                            recording = si.load(job_dict["recording_dict"], base_folder=data_folder)
+                            recording = si.load(recording_job_dict["recording_dict"], base_folder=data_folder)
                             skip_times = job_dict.get("skip_times", False)
                             if skip_times:
                                 recording.reset_times()
@@ -374,9 +370,18 @@ if __name__ == "__main__":
                                 recording.set_times(timestamps)
 
                             # Add device and electrode group
+                            probegroup = recording.get_probegroup()
+                            assert len(probegroup.probes) == 1, (
+                                "Grouping failed for this session. Each stream should be associated with a single probe!"
+                            )
+                            probe = probegroup.probes[0]
+                            electrode_group_location = "unknown"
+                            # dict with "probe_device_name", "probe", and "location"
+
+                            # 1. Look for AIND devices in metadata and use them if they match the stream name
                             probe_device_name = None
-                            if deviced_from_metadata:
-                                for device_name, device in deviced_from_metadata.items():
+                            if devices_from_metadata:
+                                for device_name, device in devices_from_metadata.items():
                                     # add the device, since it could be a laser
                                     if device_name not in nwbfile.devices:
                                         nwbfile.add_device(device)
@@ -385,65 +390,51 @@ if __name__ == "__main__":
                                     if probe_no_spaces in stream_name:
                                         probe_device_name = device_name
                                         electrode_group_location = target_locations.get(device_name, "unknown")
-                                        probe_device = device
                                         logging.info(
-                                            f"\tFound device from rig: {device_name} at location {electrode_group_location}"
+                                            f"\tFound device from metadata: {probe_device_name} at location {electrode_group_location}"
                                         )
+                                        # 1a. Apply fix for Quad Base probes to get probe device name from probe metadata instead of rig.json,
+                                        # since rig.json has the same name for all shanks but we need to differentiate them
+                                        model_name = probe.model_name
+                                        model_description = probe.description
+                                        if (model_name is not None and "Quad Base" in model_name) or \
+                                            (model_description is not None and "Quad Base" in model_description):
+                                            logging.info(f"Detected Quad Base: changing name from {probe_device_name} to {probe.name}")
+                                            probe_device_name = probe.name
                                         break
 
-                            # if probe_device_name not found in metadata, use probes_info from recording
+                            # 2. If no metadata devices, use probeinterface probes info from recording annotations
                             if probe_device_name is None:
-                                electrode_group_location = "unknown"
-                                probes_info = recording.get_annotation("probes_info", None)
-                                if probes_info is not None and len(probes_info) == 1:
-                                    probe_info = probes_info[0]
-                                    probe_device_name = probe_info.get("name", None)
-                                    probe_device_manufacturer = probe_info.get("manufacturer", None)
-                                    probe_model_name = probe_info.get("model_name", None)
-                                    probe_serial_number = probe_info.get("serial_number", None)
-                                    probe_device_description = ""
-                                    if probe_device_name is None:
-                                        if probe_model_name is not None:
-                                            probe_device_name = probe_model_name
-                                        else:
-                                            probe_device_name = "Probe"
-                                    if probe_model_name is not None:
-                                        probe_device_description += f"Model: {probe_device_description}"
-                                    if probe_serial_number is not None:
-                                        if len(probe_device_description) > 0:
-                                            probe_device_description += " - "
-                                        probe_device_description += f"Serial number: {probe_serial_number}"
-                                    probe_device = Device(
-                                        name=probe_device_name,
-                                        description=probe_device_description,
-                                        manufacturer=probe_device_manufacturer,
-                                    )
-                                else:
-                                    logging.info("\tCould not load device information: using default Device")
-                                    probe_device_name = "Device"
-                                    probe_device = Device(name=probe_device_name, description="Default device")
+                                probe_device_name = probe.name or probe.model_name or "Probe"
+                                logging.info(f"\tAdding probe information from recording metadata")
 
-                                if probe_device_name not in nwbfile.devices:
-                                    nwbfile.add_device(probe_device)
-                                    logging.info(f"\tAdded probe device: {probe_device.name} from probeinterface")
-                            else:
-                                # deal with Quad Base: the rig.json has the same name for the different shanks
-                                # but we have to load the single-shank probe device name
-                                probes_info = recording.get_annotation("probes_info", None)
-                                if probes_info is not None and len(probes_info) == 1:
-                                    probe_info = probes_info[0]
-                                    model_name = probe_info.get("model_name")
-                                    model_description = probe_info.get("description")
-                                    is_quad_base = False
-                                    if model_name is not None and "Quad Base" in model_name:
-                                        is_quad_base = True
-                                    elif model_description is not None and "Quad Base" in model_description:
-                                        is_quad_base = True
-                                    if is_quad_base:
-                                        logging.info(f"Detected Quade Base: changing name from {probe_device_name} to {probe_info['name']}")
-                                        probe_device_name = probe_info["name"]
+                            # 3. Add probe to NWB
+                            probe_device_manufacturer = probe.manufacturer
+                            probe_model_name = probe.model_name
+                            probe_serial_number = probe.serial_number
+                            probe_description = probe.description
+                            probe_device_description = ""
 
+                            if probe_model_name is not None:
+                                probe_device_description += f"Model: {probe_model_name}"
+                            if probe_serial_number is not None:
+                                if len(probe_device_description) > 0:
+                                    probe_device_description += " - "
+                                probe_device_description += f"Serial number: {probe_serial_number}"
+                            if probe_description is not None:
+                                if len(probe_device_description) > 0:
+                                    probe_device_description += " - "
+                                probe_device_description += f"Description: {probe_description}"
+                            probe_device = Device(
+                                name=probe_device_name,
+                                description=probe_device_description,
+                                manufacturer=probe_device_manufacturer,
+                            )
+                            if probe_device_name not in nwbfile.devices:
+                                nwbfile.add_device(probe_device)
+                                logging.info(f"\tAdded probe device: {probe_device.name} - {probe_device.description}")
 
+                            # Add electrode metadats
                             electrode_metadata = dict(
                                 Ecephys=dict(
                                     Device=[dict(name=probe_device_name)],
@@ -461,9 +452,7 @@ if __name__ == "__main__":
                                 continue
 
                             analyzer = si.load(analyzer_folder, load_extensions=False)
-
-                            # Load curated sorting and set properties
-                            sorting_curated = si.load(curated_folder / recording_name)
+                            sorting_curated = analyzer.sorting
 
                             if len(analyzer.unit_ids) != len(np.unique(analyzer.unit_ids)):
                                 try:
