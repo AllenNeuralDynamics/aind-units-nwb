@@ -370,13 +370,21 @@ if __name__ == "__main__":
                                 recording.set_times(timestamps)
 
                             # Add device and electrode group
-                            probegroup = recording.get_probegroup()
-                            assert len(probegroup.probes) == 1, (
-                                "Grouping failed for this session. Each stream should be associated with a single probe!"
-                            )
-                            probe = probegroup.probes[0]
-                            electrode_group_location = "unknown"
-                            # dict with "probe_device_name", "probe", and "location"
+                            # For the NWB case, since the parser only read channel locations, the job-dispatch creates
+                            # a probe with the correct probe_device_name, so that neuroconv uses the right existing device
+                            if recording_job_dict.get("probe_dict") is not None:
+                                logging.info(f"\tAdding probe information from job-dispatch metadata")
+                                probe_dict = recording_job_dict["probe_dict"]
+                                probe = pi.Probe.from_dict(probe_dict)
+                                electrode_group_location = probe.annotations.get("electrode_group_location", "unknown")
+                            else:
+                                logging.info(f"\tAdding probe information from recording metadata")
+                                probegroup = recording.get_probegroup()
+                                assert len(probegroup.probes) == 1, (
+                                    "Grouping failed for this session. Each stream should be associated with a single probe!"
+                                )
+                                probe = probegroup.probes[0]
+                                electrode_group_location = "unknown"
 
                             # 1. Look for AIND devices in metadata and use them if they match the stream name
                             probe_device_name = None
