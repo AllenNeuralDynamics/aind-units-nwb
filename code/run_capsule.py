@@ -485,7 +485,12 @@ if __name__ == "__main__":
                             sorting_curated.set_property("ks_unit_id", sorting_curated.unit_ids)
 
                             # Add 'amplitude' property
-                            amplitudes = np.round(list(si.get_template_extremum_amplitude(analyzer, mode="peak_to_peak").values()), 2)
+                            amplitudes = si.get_template_amplitude_on_main_channel(
+                                analyzer,
+                                peak_mode="peak_to_peak",
+                                with_dict=False
+                            )
+                            amplitudes = np.round(amplitudes, 2)
                             sorting_curated.set_property("amplitude", amplitudes)
                             # Add depth property
                             unit_locations = np.round(analyzer.get_extension("unit_locations").get_data(), 2)
@@ -495,7 +500,7 @@ if __name__ == "__main__":
                                 sorting_curated.set_property("estimated_z", unit_locations[:, 2])
                             sorting_curated.set_property("depth", unit_locations[:, 1])
                             # add max_channel property
-                            extremum_channel_indices = list(si.get_template_extremum_channel(analyzer, outputs="index").values())
+                            extremum_channel_indices = analyzer.get_main_channels(outputs="index", with_dict=False)
                             sorting_curated.set_property("extremum_channel_index", extremum_channel_indices)
 
                             if STUB_TEST:
