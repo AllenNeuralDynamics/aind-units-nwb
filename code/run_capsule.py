@@ -115,7 +115,7 @@ if __name__ == "__main__":
     nwb_file0 = nwb_files[0]
 
     if nwb_file0.is_dir():
-        assert (nwb_file0 / ".zattrs").is_file(), f"{nwb_file0.name} is not a valid Zarr folder"
+        assert (nwb_file0 / "zarr.json").is_file(), f"{nwb_file0.name} is not a valid Zarr folder"
         NWB_BACKEND = "zarr"
         io_class = NWBZarrIO
     else:
