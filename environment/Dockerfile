@@ -11,13 +11,9 @@ RUN apt-get update \
         build-essential=12.9ubuntu3 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN conda install -y \
-        jupyterlab==4.4.9 \
-    && conda clean -ya
-
 RUN pip install -U --no-cache-dir \
     aind-log-utils==0.2.3 \
-    aind-nwb-utils==0.2.5 \
+    aind-nwb-utils==0.2.6 \
     hdmf==6.1.0 \
     hdmf-zarr==0.13.0 \
     neuroconv==0.9.3 \

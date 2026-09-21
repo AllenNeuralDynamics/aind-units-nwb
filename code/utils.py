@@ -1,12 +1,38 @@
-import json
-import warnings
-from pathlib import Path
 from typing import Union, List, Optional, Literal
 import numpy as np
 
 import pynwb
 
 from spikeinterface import BaseRecording, SortingAnalyzer
+
+
+def _get_electrode_group_indices_by_channel(recording, nwbfile):
+    """
+    Like neuroconv's _get_electrode_group_indices but returns one NWB electrode index
+    per recording channel, in recording channel order, disambiguating by channel_name.
+    This is required for NP1.0 files that store 384 AP + 96 LF electrodes in the same
+    table: group_name alone is ambiguous, and order must match the template array axes.
+    """
+    if "group_name" in recording.get_property_keys():
+        group_names = {str(g) for g in recording.get_property("group_name")}
+    elif "group" in recording.get_property_keys():
+        group_names = {str(g) for g in recording.get_property("group")}
+    else:
+        return None
+
+    channel_names_prop = recording.get_property("channel_name")
+    if channel_names_prop is None:
+        recording_channel_names = recording.get_channel_ids().astype(str)
+    else:
+        recording_channel_names = np.asarray(channel_names_prop, dtype=str)
+
+    electrodes_df = nwbfile.electrodes.to_dataframe()
+    # Build channel_name -> NWB index lookup, restricted to matching groups
+    filtered_df = electrodes_df[electrodes_df["group_name"].isin(group_names)]
+    channel_name_to_index = {str(ch): idx for idx, ch in zip(filtered_df.index, filtered_df["channel_name"])}
+
+    # One index per recording channel, preserving recording channel order
+    return np.array([channel_name_to_index[ch] for ch in recording_channel_names])
 
 
 def add_waveforms_with_uneven_channels(
@@ -31,7 +57,6 @@ def add_waveforms_with_uneven_channels(
     from neuroconv.tools.spikeinterface.spikeinterface import (
         add_electrodes_to_nwbfile,
         _add_units_table_to_nwbfile,
-        _get_electrode_group_indices,
     )
 
     # TODO: move into add_units
@@ -100,22 +125,33 @@ def add_waveforms_with_uneven_channels(
     # add electrodes only if needed
     if nwbfile.electrodes is None and write_waveforms:
         add_electrodes_to_nwbfile(recording, nwbfile=nwbfile, metadata=metadata)
-    electrode_group_indices = _get_electrode_group_indices(recording, nwbfile=nwbfile)
+    electrode_indices = _get_electrode_group_indices_by_channel(recording, nwbfile=nwbfile)
 
     available_nwb_groups = np.unique(nwbfile.electrodes["group_name"][:])
     available_recording_groups = np.unique(recording.get_channel_groups())
 
     if write_waveforms:
-        if len(electrode_group_indices) == 0:
+        if electrode_indices is None or len(electrode_indices) == 0:
             print(
-                f"Could not find electrode group indices for templates: waveform_mean/sd will not be added to NWB.\n"
+                f"Could not find electrode indices for templates: waveform_mean/sd will not be added to NWB.\n"
                 f"Groups in NWB: {available_nwb_groups} - Groups in recording: {available_recording_groups}."
             )
             template_means = None
             template_stds = None
             unit_electrode_indices = None
         else:
-            unit_electrode_indices = [electrode_group_indices] * num_units        
+            unit_electrode_indices = [electrode_indices] * num_units
+
+            if len(electrode_indices) != template_means.shape[2]:
+                print(
+                    f"Mismatch between electrode indices ({len(electrode_indices)}) and "
+                    f"template channel dimension ({template_means.shape[2]}). "
+                    f"Check that the recording passed to add_waveforms_with_uneven_channels "
+                    f"matches the electrodes already written to the NWB file."
+                )
+                template_means = None
+                template_stds = None
+                unit_electrode_indices = None
 
     _add_units_table_to_nwbfile(
         sorting=sorting_copy,
