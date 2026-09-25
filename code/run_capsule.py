@@ -19,14 +19,6 @@ from hdmf_zarr import NWBZarrIO
 
 from aind_nwb_utils.utils import get_ephys_devices_from_metadata
 
-# AIND
-try:
-    from aind_log_utils import log
-
-    HAVE_AIND_LOG_UTILS = True
-except ImportError:
-    HAVE_AIND_LOG_UTILS = False
-
 from utils import add_waveforms_with_uneven_channels
 
 
@@ -54,8 +46,14 @@ stub_units_help = "Number of units for stub sorting"
 stub_units_group.add_argument("--stub-units", default=10, help=stub_units_help)
 stub_units_group.add_argument("static_stub_units", nargs="?", default="10", help=stub_units_help)
 
+parser.add_argument(
+    "--params",
+    default=None,
+    help="Path to the parameters file or JSON string. Currently only used for the 'logging' configuration.",
+)
 
-if __name__ == "__main__":
+
+def run():
     t_export_start = time.perf_counter()
 
     # Add STUB option to reduce units/times
@@ -66,7 +64,20 @@ if __name__ == "__main__":
     else:
         STUB_TEST = True if args.static_stub == "true" else False
     STUB_UNITS = int(args.stub_units) or int(args.static_stub_units)
-    
+    PARAMS = args.params
+
+    params = {}
+    if PARAMS is not None:
+        try:
+            params = json.loads(PARAMS)
+        except json.JSONDecodeError:
+            if Path(PARAMS).is_file():
+                with open(PARAMS, "r") as f:
+                    params = json.load(f)
+            else:
+                raise ValueError(f"Invalid parameters: {PARAMS} is not a valid JSON string or file path")
+    LOGGING = params.pop("logging", None)
+
     # find raw data
     ecephys_folders = [
         p
@@ -78,27 +89,40 @@ if __name__ == "__main__":
     ]
     assert len(ecephys_folders) == 1, "Attach one ecephys folder at a time"
     ecephys_session_folder = ecephys_folders[0]
-    if HAVE_AIND_LOG_UTILS:
-        # look for subject.json and data_description.json files
-        subject_json = ecephys_session_folder / "subject.json"
-        subject_id = "undefined"
-        if subject_json.is_file():
-            subject_data = json.load(open(subject_json, "r"))
-            subject_id = subject_data["subject_id"]
 
-        data_description_json = ecephys_session_folder / "data_description.json"
-        session_name = "undefined"
-        if data_description_json.is_file():
-            data_description = json.load(open(data_description_json, "r"))
-            session_name = data_description["name"]
-
-        log.setup_logging(
-            "NWB Packaging Units",
-            subject_id=subject_id,
-            asset_name=session_name,
-        )
+    if LOGGING is None:
+        logging.basicConfig(level="INFO", stream=sys.stdout, format="%(message)s")
     else:
-        logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
+        if LOGGING["package"] == "logging":
+            logging_cfg = LOGGING.get("logging_cfg", {})
+            logging.basicConfig(stream=sys.stdout, **logging_cfg)
+        elif LOGGING["package"] == "log-schema":
+            import log_schema
+
+            pipeline_name = LOGGING.get("pipeline_name", "AIND Ephys Pipeline")
+            acquisition_name = LOGGING.get("acquisition_name", None)
+
+            if acquisition_name is None:
+                data_description_json = list(data_folder.glob("**/data_description.json"))
+                if len(data_description_json) > 0:
+                    data_description_json = data_description_json[0]
+                    with open(data_description_json, "r") as f:
+                        data_description = json.load(f)
+                    acquisition_name = data_description["name"]
+
+            config = LOGGING.get("logging_cfg")
+            if config is not None and len(config) == 0:
+                config = None
+            log_schema.setup_logging(
+                config=config,
+                model={
+                    "pipeline_name": pipeline_name,
+                    "acquisition_name": acquisition_name,
+                    "process_name": "NWB Packaging Units",
+                },
+            )
+
+    logging.info("Begin processing...", extra={"event_type": "stage_start"})
 
     logging.info("\n\nNWB EXPORT UNITS")
     logging.info(f"Running NWB conversion with the following parameters:")
@@ -583,3 +607,12 @@ if __name__ == "__main__":
     t_export_end = time.perf_counter()
     elapsed_time_export = np.round(t_export_end - t_export_start, 2)
     logging.info(f"NWB EXPORT UNITS time: {elapsed_time_export}s")
+    logging.info("Pipeline stage completed", extra={"event_type": "stage_complete"})
+
+
+if __name__ == "__main__":
+    try:
+        run()
+    except Exception as e:
+        logging.exception("Pipeline stage failed", extra={"event_type": "stage_error"})
+        raise
