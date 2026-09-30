@@ -76,6 +76,11 @@ def run():
                     params = json.load(f)
             else:
                 raise ValueError(f"Invalid parameters: {PARAMS} is not a valid JSON string or file path")
+    else:
+        with open("params.json", "r") as f:
+            params = json.load(f)
+
+    # TODO: temporary - remove from params.json when logging is distributed by pipeline
     LOGGING = params.pop("logging", None)
 
     # find raw data
