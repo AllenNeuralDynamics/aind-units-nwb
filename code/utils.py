@@ -58,9 +58,12 @@ def add_waveforms_with_uneven_channels(
         add_electrodes_to_nwbfile,
         _add_units_table_to_nwbfile,
 <<<<<<< HEAD
+<<<<<<< HEAD
         _get_electrode_group_indices,
 =======
 >>>>>>> main
+=======
+>>>>>>> dev
     )
 
     # TODO: move into add_units
@@ -130,10 +133,14 @@ def add_waveforms_with_uneven_channels(
     if nwbfile.electrodes is None and write_waveforms:
         add_electrodes_to_nwbfile(recording, nwbfile=nwbfile, metadata=metadata)
 <<<<<<< HEAD
+<<<<<<< HEAD
     electrode_group_indices = _get_electrode_group_indices(recording, nwbfile=nwbfile)
 =======
     electrode_indices = _get_electrode_group_indices_by_channel(recording, nwbfile=nwbfile)
 >>>>>>> main
+=======
+    electrode_indices = _get_electrode_group_indices_by_channel(recording, nwbfile=nwbfile)
+>>>>>>> dev
 
     available_nwb_groups = np.unique(nwbfile.electrodes["group_name"][:])
     available_recording_groups = np.unique(recording.get_channel_groups())
@@ -151,7 +158,10 @@ def add_waveforms_with_uneven_channels(
             unit_electrode_indices = [electrode_indices] * num_units
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> dev
             if len(electrode_indices) != template_means.shape[2]:
                 print(
                     f"Mismatch between electrode indices ({len(electrode_indices)}) and "
@@ -163,7 +173,10 @@ def add_waveforms_with_uneven_channels(
                 template_stds = None
                 unit_electrode_indices = None
 
+<<<<<<< HEAD
 >>>>>>> main
+=======
+>>>>>>> dev
     _add_units_table_to_nwbfile(
         sorting=sorting_copy,
         nwbfile=nwbfile,
