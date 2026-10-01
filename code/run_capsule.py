@@ -399,21 +399,12 @@ def run():
                                 recording.set_times(timestamps)
 
                             # Add device and electrode group
-                            # For the NWB case, since the parser only read channel locations, the job-dispatch creates
-                            # a probe with the correct probe_device_name, so that neuroconv uses the right existing device
-                            if recording_job_dict.get("probe_dict") is not None:
-                                logging.info(f"\tAdding probe information from job-dispatch metadata")
-                                probe_dict = recording_job_dict["probe_dict"]
-                                probe = pi.Probe.from_dict(probe_dict)
-                                electrode_group_location = probe.annotations.get("electrode_group_location", "unknown")
-                            else:
-                                logging.info(f"\tAdding probe information from recording metadata")
-                                probegroup = recording.get_probegroup()
-                                assert len(probegroup.probes) == 1, (
-                                    "Grouping failed for this session. Each stream should be associated with a single probe!"
-                                )
-                                probe = probegroup.probes[0]
-                                electrode_group_location = "unknown"
+                            probegroup = recording.get_probegroup()
+                            assert len(probegroup.probes) == 1, (
+                                "Grouping failed for this session. Each stream should be associated with a single probe!"
+                            )
+                            probe = probegroup.probes[0]
+                            electrode_group_location = "unknown"
 
                             # 1. Look for AIND devices in metadata and use them if they match the stream name
                             probe_device_name = None
@@ -514,7 +505,7 @@ def run():
                             sorting_curated.set_property("ks_unit_id", sorting_curated.unit_ids)
 
                             # Add 'amplitude' property
-                            amplitudes = np.round(list(si.get_template_extremum_amplitude(analyzer, mode="peak_to_peak").values()), 2)
+                            amplitudes = si.get_template_amplitude_on_main_channel(analyzer, peak_mode="peak_to_peak", with_dict=False)
                             sorting_curated.set_property("amplitude", amplitudes)
                             # Add depth property
                             unit_locations = np.round(analyzer.get_extension("unit_locations").get_data(), 2)
