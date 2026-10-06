@@ -221,6 +221,10 @@ def run():
         # since we load recordings here, we keep a list of recordings associated to each recording name
         # as we might need it when it comes to aggregating groups
         recordings_associated_to_recording_name = {}
+        # group labels (e.g. "group1") parsed from the associated recording names: the "group"
+        # channel property cannot be used because SpikeInterface >= 0.105 re-enumerates it from 0
+        # whenever a recording is sliced or aggregated (every single-shank slice becomes group 0)
+        group_strs_associated_to_recording_name = {}
         for recording_name in recording_names:
             if "group" in recording_name:
                 block_str = recording_name.split("_")[0]
@@ -256,6 +260,10 @@ def run():
                 recording = si.load(recording_job_dict["recording_dict"], base_folder=data_folder)
                 recording_list = [si.load(job_dict["recording_dict"], base_folder=data_folder) for job_dict in recording_job_dicts_all]
                 recordings_associated_to_recording_name[recording_name] = recording_list
+                group_strs_associated_to_recording_name[recording_name] = [
+                    job_dict["recording_name"].split("_")[-1] if "group" in job_dict["recording_name"] else ""
+                    for job_dict in recording_job_dicts_all
+                ]
                 if (block_str, recording_str) not in recording_sampling_frequencies:
                     recording_sampling_frequencies[(block_str, recording_str)] = {}
                 if (block_str, recording_str) not in recording_num_channels:
@@ -540,6 +548,7 @@ def run():
                                     units_description += f" from {sorter_name.capitalize()}"
 
                             recording_list = recordings_associated_to_recording_name[recording_name]
+                            group_strs = group_strs_associated_to_recording_name[recording_name]
                             if aggregate_groups[(block_str, recording_str)]:
                                 # Add channel properties (group_name property to associate electrodes with group)
                                 if aggregate_groups[(block_str, recording_str)] and len(recording_list) > 1:
@@ -547,8 +556,15 @@ def run():
                                     recording = si.aggregate_channels(recording_list)
                                 else:
                                     recording = recording_list[0]
+                                    group_strs = group_strs[:1]
+                            else:
+                                recording_list = [recording]
+                                group_strs = [group_str]
 
-                            channel_groups = recording.get_channel_groups()
+                            # one label per channel, following the (possibly aggregated) channel order
+                            channel_groups = [
+                                g for rec, g in zip(recording_list, group_strs) for _ in range(rec.get_num_channels())
+                            ]
                             if group_str == "":
                                 # single shank probe
                                 recording.set_channel_groups([probe_device_name] * recording.get_num_channels())
@@ -561,7 +577,7 @@ def run():
                                     )
                                 ]
                             else:
-                                recording.set_channel_groups([f"{probe_device_name}_group{g}" for g in channel_groups])
+                                recording.set_channel_groups([f"{probe_device_name}_{g}" for g in channel_groups])
                                 channel_groups_unique = np.unique(recording.get_channel_groups())
                                 electrode_groups_metadata = [
                                     dict(
