@@ -397,6 +397,14 @@ def run():
                                 logging.info(f"\tSetting synced timestamps from {timestamps_file}")
                                 timestamps = np.load(timestamps_file)
                                 recording.set_times(timestamps)
+                            # a zarr-backed time vector stays lazy, and neuroconv indexes it once per unit,
+                            # decoding the whole vector each time; read it into memory once per stream
+                            for segment_index in range(recording.get_num_segments()):
+                                time_vector = recording._recording_segments[segment_index].time_vector
+                                if time_vector is not None and not isinstance(time_vector, np.ndarray):
+                                    recording.set_times(
+                                        time_vector[:], segment_index=segment_index, with_warning=False
+                                    )
 
                             # Add device and electrode group
                             probegroup = recording.get_probegroup()
