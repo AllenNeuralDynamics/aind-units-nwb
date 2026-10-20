@@ -221,6 +221,8 @@ def run():
         # since we load recordings here, we keep a list of recordings associated to each recording name
         # as we might need it when it comes to aggregating groups
         recordings_associated_to_recording_name = {}
+        # (block, recording) pairs that actually exist: not all streams/recordings are present in every block
+        existing_block_recordings = set()
         for recording_name in recording_names:
             if "group" in recording_name:
                 block_str = recording_name.split("_")[0]
@@ -235,6 +237,7 @@ def run():
                 group_str = ""
                 recording_name_no_group = recording_name
 
+            existing_block_recordings.add((block_str, recording_str))
             if block_str not in block_ids:
                 block_ids.append(block_str)
             if recording_str not in recording_ids:
@@ -311,20 +314,23 @@ def run():
         recording_ids = sorted(recording_ids)
         streams_to_process = sorted(stream_names)
 
-        logging.info(f"Number of NWB files to write: {len(block_ids) * len(recording_ids)}")
+        logging.info(f"Number of NWB files to write: {len(existing_block_recordings)}")
         logging.info(f"Number of streams to write for each file: {len(streams_to_process)}")
 
         nwb_output_files = []
         multi_input_files = False
         if len(nwb_files) > 1:
-            assert len(nwb_files) >= len(block_ids) * len(recording_ids), (
+            assert len(nwb_files) >= len(existing_block_recordings), (
                 "Inconsistent number of input NWB files with number of blocks and recordings: "
-                f"Num NWB files: {len(nwb_files)} - Num files to write: {len(block_ids) * len(recording_ids)}"
+                f"Num NWB files: {len(nwb_files)} - Num files to write: {len(existing_block_recordings)}"
             )
             multi_input_files = True
 
         for block_index, block_str in enumerate(block_ids):
             for segment_index, recording_str in enumerate(recording_ids):
+                if (block_str, recording_str) not in existing_block_recordings:
+                    logging.info(f"No recordings found for {block_str} - {recording_str}. Skipping")
+                    continue
                 # add recording/experiment id if needed
                 if multi_input_files:
                     nwb_input_path_for_current = [
