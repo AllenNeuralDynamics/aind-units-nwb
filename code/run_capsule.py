@@ -51,6 +51,32 @@ parser.add_argument(
     default=None,
     help="Path to the parameters file or JSON string. Currently only used for the 'logging' configuration.",
 )
+ecephys_url_help = (
+    "URL (e.g. s3://bucket/session) of the session that job dispatch read in place with the same flag. Its job JSONs "
+    "point at data/ecephys_session, which then holds only the session's JSONs, so recordings are read from here."
+)
+parser.add_argument("--ecephys-url", default=None, help=ecephys_url_help)
+
+# where job dispatch's --ecephys-url mode records the session as staged
+STAGED_SESSION_NAME = "ecephys_session"
+
+
+def as_remote(obj, session_url: str):
+    """Rewrite paths under the staged session, relative to the data folder, to `session_url`."""
+    if isinstance(obj, dict):
+        return {key: as_remote(value, session_url) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [as_remote(value, session_url) for value in obj]
+    if isinstance(obj, str) and obj.startswith(f"{STAGED_SESSION_NAME}/"):
+        return session_url + obj[len(STAGED_SESSION_NAME) :]
+    return obj
+
+
+def load_job_recording(recording_dict: dict, session_url: str | None) -> si.BaseRecording:
+    """Load a job JSON's recording from the data folder, or from `session_url` if the session was not staged."""
+    if session_url is None:
+        return si.load(recording_dict, base_folder=data_folder)
+    return si.load(as_remote(recording_dict, session_url.rstrip("/")) | {"relative_paths": False})
 
 
 def run():
@@ -82,6 +108,8 @@ def run():
 
     # TODO: temporary - remove from params.json when logging is distributed by pipeline
     LOGGING = params.pop("logging", None)
+
+    ECEPHYS_URL = args.ecephys_url
 
     # find raw data
     ecephys_folders = [
@@ -133,6 +161,8 @@ def run():
     logging.info(f"Running NWB conversion with the following parameters:")
     logging.info(f"Stub test: {STUB_TEST}")
     logging.info(f"Stub units: {STUB_UNITS}")
+    if ECEPHYS_URL:
+        logging.info(f"Ecephys URL: {ECEPHYS_URL}")
 
     # find base NWB file
     nwb_files = [
@@ -256,8 +286,8 @@ def run():
                 if recording_name == job_dict["recording_name"]:
                     recording_job_dict = job_dict
             if len(recording_job_dicts_all) > 0 and recording_job_dict is not None:
-                recording = si.load(recording_job_dict["recording_dict"], base_folder=data_folder)
-                recording_list = [si.load(job_dict["recording_dict"], base_folder=data_folder) for job_dict in recording_job_dicts_all]
+                recording = load_job_recording(recording_job_dict["recording_dict"], ECEPHYS_URL)
+                recording_list = [load_job_recording(job_dict["recording_dict"], ECEPHYS_URL) for job_dict in recording_job_dicts_all]
                 recordings_associated_to_recording_name[recording_name] = recording_list
                 if (block_str, recording_str) not in recording_sampling_frequencies:
                     recording_sampling_frequencies[(block_str, recording_str)] = {}
@@ -394,7 +424,7 @@ def run():
                             added_stream_names.append(stream_str)
 
                             # load associated recordings
-                            recording = si.load(recording_job_dict["recording_dict"], base_folder=data_folder)
+                            recording = load_job_recording(recording_job_dict["recording_dict"], ECEPHYS_URL)
                             skip_times = job_dict.get("skip_times", False)
                             if skip_times:
                                 recording.reset_times()
