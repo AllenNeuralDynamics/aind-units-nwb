@@ -433,11 +433,12 @@ def run():
                                             f"\tFound device from metadata: {probe_device_name} at location {electrode_group_location}"
                                         )
                                         # 1a. Apply fix for Quad Base probes to get probe device name from probe metadata instead of rig.json,
-                                        # since rig.json has the same name for all shanks but we need to differentiate them
+                                        # since rig.json has the same name for all shanks but we need to differentiate them.
+                                        # Case-insensitive: probeinterface describes NP2020 as "... quad base (Ph 2C)"
                                         model_name = probe.model_name
                                         model_description = probe.description
-                                        if (model_name is not None and "Quad Base" in model_name) or \
-                                            (model_description is not None and "Quad Base" in model_description):
+                                        if (model_name is not None and "quad base" in model_name.lower()) or \
+                                            (model_description is not None and "quad base" in model_description.lower()):
                                             logging.info(f"Detected Quad Base: changing name from {probe_device_name} to {probe.name}")
                                             probe_device_name = probe.name
                                         break
