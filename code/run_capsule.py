@@ -44,7 +44,7 @@ def run():
     with open(PARAMS_FILE, "r") as f:
         full_params = json.load(f)
     # no "units" section in the pipeline params yet: stub options default to the old CLI defaults
-    units_params = full_params.get("nwb", {}).get("units", {})
+    units_params = full_params["nwb_units"]
     LOGGING = full_params.get("logging", None)
 
     STUB_TEST = units_params.get("stub", False)
