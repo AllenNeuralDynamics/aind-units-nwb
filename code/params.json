@@ -1,8 +1,0 @@
-{
-    "logging": {
-        "package": "log-schema"
-    },
-    "nwb": {
-        "units": {}
-    }
-}
