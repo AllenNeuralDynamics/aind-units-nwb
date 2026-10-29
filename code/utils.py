@@ -28,7 +28,9 @@ def _get_electrode_group_indices_by_channel(recording, nwbfile):
 
     electrodes_df = nwbfile.electrodes.to_dataframe()
     # Build channel_name -> NWB index lookup, restricted to matching groups
-    filtered_df = electrodes_df[electrodes_df["group_name"].isin(group_names)]
+    # compare without spaces: the rig device name ("Probe A") can differ from the one in the NWB ("ProbeA")
+    nwb_group_names = electrodes_df["group_name"].astype(str).str.replace(" ", "")
+    filtered_df = electrodes_df[nwb_group_names.isin({g.replace(" ", "") for g in group_names})]
     channel_name_to_index = {str(ch): idx for idx, ch in zip(filtered_df.index, filtered_df["channel_name"])}
 
     # One index per recording channel, preserving recording channel order

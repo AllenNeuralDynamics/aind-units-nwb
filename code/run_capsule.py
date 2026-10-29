@@ -2,7 +2,6 @@
 import sys
 import shutil
 import json
-import argparse
 from pathlib import Path
 import numpy as np
 import logging
@@ -34,54 +33,22 @@ skip_unit_properties = [
     "Amplitude",
 ]
 
-parser = argparse.ArgumentParser(description="Export Units data to NWB")
-
-stub_group = parser.add_mutually_exclusive_group()
-stub_help = "Write a stub version for testing"
-stub_group.add_argument("--stub", action="store_true", help=stub_help)
-stub_group.add_argument("static_stub", nargs="?", default="false", help=stub_help)
-
-stub_units_group = parser.add_mutually_exclusive_group()
-stub_units_help = "Number of units for stub sorting"
-stub_units_group.add_argument("--stub-units", default=10, help=stub_units_help)
-stub_units_group.add_argument("static_stub_units", nargs="?", default="10", help=stub_units_help)
-
-parser.add_argument(
-    "--params",
-    default=None,
-    help="Path to the parameters file or JSON string. Currently only used for the 'logging' configuration.",
-)
+PARAMS_FILE = Path("../params.json")
 
 
 def run():
     t_export_start = time.perf_counter()
 
-    # Add STUB option to reduce units/times
-    args = parser.parse_args()
-    stub = args.stub or args.static_stub
-    if args.stub:
-        STUB_TEST = True
-    else:
-        STUB_TEST = True if args.static_stub == "true" else False
-    STUB_UNITS = int(args.stub_units) or int(args.static_stub_units)
-    PARAMS = args.params
+    if not PARAMS_FILE.is_file():
+        raise ValueError(f"Parameters file not found: {PARAMS_FILE}")
+    with open(PARAMS_FILE, "r") as f:
+        full_params = json.load(f)
+    # no "units" section in the pipeline params yet: stub options default to the old CLI defaults
+    units_params = full_params["nwb_units"]
+    LOGGING = full_params.get("logging", None)
 
-    params = {}
-    if PARAMS is not None:
-        try:
-            params = json.loads(PARAMS)
-        except json.JSONDecodeError:
-            if Path(PARAMS).is_file():
-                with open(PARAMS, "r") as f:
-                    params = json.load(f)
-            else:
-                raise ValueError(f"Invalid parameters: {PARAMS} is not a valid JSON string or file path")
-    else:
-        with open("params.json", "r") as f:
-            params = json.load(f)
-
-    # TODO: temporary - remove from params.json when logging is distributed by pipeline
-    LOGGING = params.pop("logging", None)
+    STUB_TEST = units_params.get("stub", False)
+    STUB_UNITS = int(units_params.get("stub_units", 10))
 
     # find raw data
     ecephys_folders = [
@@ -105,15 +72,7 @@ def run():
             import log_schema
 
             pipeline_name = LOGGING.get("pipeline_name", "AIND Ephys Pipeline")
-            acquisition_name = LOGGING.get("acquisition_name", None)
-
-            if acquisition_name is None:
-                data_description_json = list(data_folder.glob("*ecephys*/data_description.json"))
-                if len(data_description_json) > 0:
-                    data_description_json = data_description_json[0]
-                    with open(data_description_json, "r") as f:
-                        data_description = json.load(f)
-                    acquisition_name = data_description["name"]
+            acquisition_name = LOGGING.get("acquisition_name", "unknown")
 
             config = LOGGING.get("logging_cfg")
             if config is not None and len(config) == 0:
