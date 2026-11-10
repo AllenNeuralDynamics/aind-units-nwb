@@ -169,17 +169,12 @@ def run():
         stream_names = []
 
         # these dictionaries are used to check if recordings from the same block, but from different streams
-        # or groups have the same sampling frequency and number of channels
-        # if not, we skip writing waveform_means and standard_deviations since they require the same
-        # shape across all units
+        # or groups have the same sampling frequency and to find the number of sparse channels per unit:
+        # waveform_means and standard_deviations require the same shape across all units
         recording_sampling_frequencies = {}
-        recording_num_channels = {}
-        recording_num_channels_all = {}
+        # (block, recording) -> list of (max sparse channels per unit, num analyzer channels), one per stream/group
+        analyzer_num_channels = {}
         write_waveforms = {}
-        aggregate_groups = {}
-        # since we load recordings here, we keep a list of recordings associated to each recording name
-        # as we might need it when it comes to aggregating groups
-        recordings_associated_to_recording_name = {}
         # (block, recording) pairs that actually exist: not all streams/recordings are present in every block
         existing_block_recordings = set()
         for recording_name in recording_names:
@@ -188,13 +183,11 @@ def run():
                 recording_str = recording_name.split("_")[-2]
                 group_str = recording_name.split("_")[-1]
                 stream_name = "_".join(recording_name.split("_")[1:-2])
-                recording_name_no_group = "_".join(recording_name.split("_")[:-1])
             else:
                 block_str = recording_name.split("_")[0]
                 recording_str = recording_name.split("_")[-1]
                 stream_name = "_".join(recording_name.split("_")[1:-1])
                 group_str = ""
-                recording_name_no_group = recording_name
 
             existing_block_recordings.add((block_str, recording_str))
             if block_str not in block_ids:
@@ -206,68 +199,60 @@ def run():
             if group_str not in group_ids:
                 group_ids.append(group_str)
 
-            # load the recording and check sampling rate and number of channels
+            # load the recording and check sampling rate and number of sparse channels
             recording_job_dict = None
-            recording_job_dicts_all = []
             for job_dict in job_dicts:
-                if recording_name_no_group in job_dict["recording_name"]:
-                    recording_job_dicts_all.append(job_dict)
                 if recording_name == job_dict["recording_name"]:
                     recording_job_dict = job_dict
-            if len(recording_job_dicts_all) > 0 and recording_job_dict is not None:
-                recording = si.load(recording_job_dict["recording_dict"], base_folder=data_folder)
-                recording_list = [si.load(job_dict["recording_dict"], base_folder=data_folder) for job_dict in recording_job_dicts_all]
-                recordings_associated_to_recording_name[recording_name] = recording_list
-                if (block_str, recording_str) not in recording_sampling_frequencies:
-                    recording_sampling_frequencies[(block_str, recording_str)] = {}
-                if (block_str, recording_str) not in recording_num_channels:
-                    recording_num_channels[(block_str, recording_str)] = {}
-                if (block_str, recording_str) not in recording_num_channels_all:
-                    recording_num_channels_all[(block_str, recording_str)] = {}
-                recording_sampling_frequencies[(block_str, recording_str)][stream_name] = recording.sampling_frequency
-                recording_num_channels[(block_str, recording_str)][(stream_name, group_str)] = recording.get_num_channels()
-                recording_num_channels_all[(block_str, recording_str)][stream_name] = sum([r.get_num_channels() for r in recording_list])
-            else:
+                    break
+            if recording_job_dict is None:
                 logging.info(f"Couldn't find job dict for {recording_name}")
+                continue
+            analyzer_folder = postprocessed_folder / f"{recording_name}.zarr"
+            if not analyzer_folder.is_dir():
+                analyzer_folder = postprocessed_folder / recording_name
+            if not analyzer_folder.is_dir():
+                logging.info(f"No analyzer found for {recording_name}")
+                continue
+            key = (block_str, recording_str)
+            recording = si.load(recording_job_dict["recording_dict"], base_folder=data_folder)
+            recording_sampling_frequencies.setdefault(key, {})[stream_name] = recording.sampling_frequency
+            analyzer_lazy = si.load(analyzer_folder, lazy=True)
+            num_analyzer_channels = analyzer_lazy.get_num_channels()
+            if analyzer_lazy.sparsity is None:
+                num_sparse_channels = num_analyzer_channels
+            else:
+                num_sparse_channels = int(analyzer_lazy.sparsity.mask.sum(axis=1).max())
+            analyzer_num_channels.setdefault(key, {})[recording_name] = (num_sparse_channels, num_analyzer_channels)
 
         # We first check the sampling frequencies across streams.
         # If sampling frequencies for different streams, do not write waveforms for the block/recording, because they
         # have a different number of samples
         for key, sampling_frequencies in recording_sampling_frequencies.items():
-            if len(np.unique(sampling_frequencies.values())) > 1:
+            if len(np.unique(list(sampling_frequencies.values()))) > 1:
                 logging.info(
                     f"Recordings from different blocks/groups have different sampling frequencies: {recording_sampling_frequencies}"
                 )
                 write_waveforms[key] = False
             else:
                 write_waveforms[key] = True
-        # Here we check the number of channels across streams, we have 3 options:
-        # 1. there are no channel groups OR there are channel groups with same number of channels for each stream
-        #    (.e.g, 2 NP2.0-4shank in the same experiment/recording --> each group has 96 electrodes)
-        # 2. there are channel groups, but in the same experiment/recording there is a mix of probes with/without groups,
-        #    but the sum of channels per probe is the same
-        #    (e.g. 1 NP2.0-4shank and 1 NP1.0 --> each shank has 96 electrodes, but the second probe has 384
-        # 3. there are channel groups/probes with incompatible number of channels.
-        #    (e.g., a 32-channel probe and a 384-channel probe in the same experiment/recording)
-        # For case 1, we can write waverorm_means/stds for individual groups only (96-channels)
-        # For case 2, we need to aggregate groups and pad waveforms with zeros
-        # For case 3, we cannot write waveforms
-        for key, num_channels in recording_num_channels.items():
-            if write_waveforms[key]:
-                if len(np.unique(list(num_channels.values()))) == 1:
-                    write_waveforms[key] = True
-                    aggregate_groups[key] = False
-                else:
-                    for key_all, num_channels_all in recording_num_channels_all.items():
-                        if len(np.unique(list(num_channels_all.values()))) == 1:
-                            write_waveforms[key] = True
-                            aggregate_groups[key] = True
-                        else:
-                            logging.info(
-                                f"Recordings from different blocks/groups have different number of channels: {recording_num_channels}"
-                            )
-                            write_waveforms[key] = False
-                            aggregate_groups[key] = False
+
+        # Templates are written sparse: every unit gets the same number of channels, i.e. the maximum
+        # number of sparse channels across streams/groups of the block/recording.
+        # If a stream/group has fewer channels than that (e.g., a 32-channel probe next to a 384-channel probe),
+        # we cannot write waveforms.
+        num_channels_max = {}
+        for key, num_channels in analyzer_num_channels.items():
+            num_channels_max[key] = max(n_sparse for n_sparse, _ in num_channels.values())
+            logging.info(f"Sparse templates for {key}: writing {num_channels_max[key]} channels per unit")
+            for name, (n_sparse, n_total) in num_channels.items():
+                logging.info(f"\t{name}: max sparse channels {n_sparse}, total channels {n_total}")
+            if num_channels_max[key] > min(n_total for _, n_total in num_channels.values()):
+                logging.info(
+                    f"Max number of sparse channels ({num_channels_max[key]}) exceeds the number of channels of "
+                    f"some streams/groups for {key}: {num_channels}. Skipping waveforms."
+                )
+                write_waveforms[key] = False
 
         block_ids = sorted(block_ids)
         recording_ids = sorted(recording_ids)
@@ -329,7 +314,7 @@ def run():
                     nwbfile = append_io.read()
 
                     added_stream_names = []
-                    for stream_index, stream_name in enumerate(streams_to_process):
+                    for stream_name in streams_to_process:
                         stream_str = str(stream_name)
                         for group_str in group_ids:
                             recording_name = f"{block_str}_{stream_name}_{recording_str}"
@@ -509,15 +494,6 @@ def run():
                                     sorter_name = sorter_log["sorter_name"]
                                     units_description += f" from {sorter_name.capitalize()}"
 
-                            recording_list = recordings_associated_to_recording_name[recording_name]
-                            if aggregate_groups[(block_str, recording_str)]:
-                                # Add channel properties (group_name property to associate electrodes with group)
-                                if aggregate_groups[(block_str, recording_str)] and len(recording_list) > 1:
-                                    logging.info(f"Aggregating {len(recording_list)} for {recording_name}")
-                                    recording = si.aggregate_channels(recording_list)
-                                else:
-                                    recording = recording_list[0]
-
                             channel_groups = recording.get_channel_groups()
                             if group_str == "":
                                 # single shank probe
@@ -552,6 +528,7 @@ def run():
                                 skip_properties=skip_unit_properties,
                                 units_description=units_description,
                                 write_waveforms=write_waveforms[(block_str, recording_str)],
+                                num_channels_max=num_channels_max.get((block_str, recording_str)),
                             )
                     logging.info(f"Added {len(added_stream_names)} streams")
 
