@@ -12,6 +12,8 @@ import time
 import probeinterface as pi
 import spikeinterface as si
 
+import h5py
+import zarr
 from pynwb import NWBHDF5IO
 from pynwb.file import Device
 from hdmf_zarr import NWBZarrIO
@@ -24,6 +26,27 @@ from utils import add_waveforms_with_uneven_channels
 data_folder = Path("../data")
 scratch_folder = Path("../scratch")
 results_folder = Path("../results")
+
+
+def remove_units_table(nwb_path: Path) -> None:
+    """Deletes the units table of an NWB file (zarr or HDF5) in place, if there is one."""
+    if nwb_path.is_dir():
+        if not (nwb_path / "units").is_dir():
+            return
+        shutil.rmtree(nwb_path / "units")
+        # .zmetadata would otherwise still list the deleted group
+        zarr.consolidate_metadata(str(nwb_path))
+        io_class = NWBZarrIO
+    else:
+        with h5py.File(nwb_path, "a") as f:
+            if "units" not in f:
+                return
+            # shortcut: HDF5 does not reclaim the space, run h5repack if file size matters
+            del f["units"]
+        io_class = NWBHDF5IO
+    with io_class(str(nwb_path), "r") as io:
+        assert io.read().units is None, f"Units table still present in {nwb_path.name}"
+    logging.info(f"\tRemoved existing units table from {nwb_path.name}")
 
 # unit properties to skip
 skip_unit_properties = [
@@ -309,6 +332,9 @@ def run():
                 devices_from_metadata, target_locations = get_ephys_devices_from_metadata(
                     ecephys_session_folder
                 )
+
+                # an input NWB from a previous run (e.g. curation pipeline) has a units table to replace
+                remove_units_table(nwbfile_output_path)
 
                 with io_class(str(nwbfile_output_path), "a") as append_io:
                     nwbfile = append_io.read()
