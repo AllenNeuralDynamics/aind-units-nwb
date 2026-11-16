@@ -2,7 +2,6 @@
 import sys
 import shutil
 import json
-import argparse
 from pathlib import Path
 import numpy as np
 import logging
@@ -13,19 +12,13 @@ import time
 import probeinterface as pi
 import spikeinterface as si
 
+import h5py
+import zarr
 from pynwb import NWBHDF5IO
 from pynwb.file import Device
 from hdmf_zarr import NWBZarrIO
 
 from aind_nwb_utils.utils import get_ephys_devices_from_metadata
-
-# AIND
-try:
-    from aind_log_utils import log
-
-    HAVE_AIND_LOG_UTILS = True
-except ImportError:
-    HAVE_AIND_LOG_UTILS = False
 
 from utils import add_waveforms_with_uneven_channels
 
@@ -33,6 +26,27 @@ from utils import add_waveforms_with_uneven_channels
 data_folder = Path("../data")
 scratch_folder = Path("../scratch")
 results_folder = Path("../results")
+
+
+def remove_units_table(nwb_path: Path) -> None:
+    """Deletes the units table of an NWB file (zarr or HDF5) in place, if there is one."""
+    if nwb_path.is_dir():
+        if not (nwb_path / "units").is_dir():
+            return
+        shutil.rmtree(nwb_path / "units")
+        # .zmetadata would otherwise still list the deleted group
+        zarr.consolidate_metadata(str(nwb_path))
+        io_class = NWBZarrIO
+    else:
+        with h5py.File(nwb_path, "a") as f:
+            if "units" not in f:
+                return
+            # shortcut: HDF5 does not reclaim the space, run h5repack if file size matters
+            del f["units"]
+        io_class = NWBHDF5IO
+    with io_class(str(nwb_path), "r") as io:
+        assert io.read().units is None, f"Units table still present in {nwb_path.name}"
+    logging.info(f"\tRemoved existing units table from {nwb_path.name}")
 
 # unit properties to skip
 skip_unit_properties = [
@@ -42,31 +56,23 @@ skip_unit_properties = [
     "Amplitude",
 ]
 
-parser = argparse.ArgumentParser(description="Export Units data to NWB")
-
-stub_group = parser.add_mutually_exclusive_group()
-stub_help = "Write a stub version for testing"
-stub_group.add_argument("--stub", action="store_true", help=stub_help)
-stub_group.add_argument("static_stub", nargs="?", default="false", help=stub_help)
-
-stub_units_group = parser.add_mutually_exclusive_group()
-stub_units_help = "Number of units for stub sorting"
-stub_units_group.add_argument("--stub-units", default=10, help=stub_units_help)
-stub_units_group.add_argument("static_stub_units", nargs="?", default="10", help=stub_units_help)
+PARAMS_FILE = Path("../params.json")
 
 
-if __name__ == "__main__":
+def run():
     t_export_start = time.perf_counter()
 
-    # Add STUB option to reduce units/times
-    args = parser.parse_args()
-    stub = args.stub or args.static_stub
-    if args.stub:
-        STUB_TEST = True
-    else:
-        STUB_TEST = True if args.static_stub == "true" else False
-    STUB_UNITS = int(args.stub_units) or int(args.static_stub_units)
-    
+    if not PARAMS_FILE.is_file():
+        raise ValueError(f"Parameters file not found: {PARAMS_FILE}")
+    with open(PARAMS_FILE, "r") as f:
+        full_params = json.load(f)
+    # no "units" section in the pipeline params yet: stub options default to the old CLI defaults
+    units_params = full_params["nwb_units"]
+    LOGGING = full_params.get("logging", None)
+
+    STUB_TEST = units_params.get("stub", False)
+    STUB_UNITS = int(units_params.get("stub_units", 10))
+
     # find raw data
     ecephys_folders = [
         p
@@ -78,27 +84,32 @@ if __name__ == "__main__":
     ]
     assert len(ecephys_folders) == 1, "Attach one ecephys folder at a time"
     ecephys_session_folder = ecephys_folders[0]
-    if HAVE_AIND_LOG_UTILS:
-        # look for subject.json and data_description.json files
-        subject_json = ecephys_session_folder / "subject.json"
-        subject_id = "undefined"
-        if subject_json.is_file():
-            subject_data = json.load(open(subject_json, "r"))
-            subject_id = subject_data["subject_id"]
 
-        data_description_json = ecephys_session_folder / "data_description.json"
-        session_name = "undefined"
-        if data_description_json.is_file():
-            data_description = json.load(open(data_description_json, "r"))
-            session_name = data_description["name"]
-
-        log.setup_logging(
-            "NWB Packaging Units",
-            subject_id=subject_id,
-            asset_name=session_name,
-        )
+    if LOGGING is None:
+        logging.basicConfig(level="INFO", stream=sys.stdout, format="%(message)s")
     else:
-        logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
+        if LOGGING["package"] == "logging":
+            logging_cfg = LOGGING.get("logging_cfg", {})
+            logging.basicConfig(stream=sys.stdout, **logging_cfg)
+        elif LOGGING["package"] == "log-schema":
+            import log_schema
+
+            pipeline_name = LOGGING.get("pipeline_name", "AIND Ephys Pipeline")
+            acquisition_name = LOGGING.get("acquisition_name", "unknown")
+
+            config = LOGGING.get("logging_cfg")
+            if config is not None and len(config) == 0:
+                config = None
+            log_schema.setup_logging(
+                config=config,
+                model={
+                    "pipeline_name": pipeline_name,
+                    "acquisition_name": acquisition_name,
+                    "process_name": "NWB Packaging Units",
+                },
+            )
+
+    logging.info("Begin processing...", extra={"event_type": "stage_start"})
 
     logging.info("\n\nNWB EXPORT UNITS")
     logging.info(f"Running NWB conversion with the following parameters:")
@@ -181,31 +192,27 @@ if __name__ == "__main__":
         stream_names = []
 
         # these dictionaries are used to check if recordings from the same block, but from different streams
-        # or groups have the same sampling frequency and number of channels
-        # if not, we skip writing waveform_means and standard_deviations since they require the same
-        # shape across all units
+        # or groups have the same sampling frequency and to find the number of sparse channels per unit:
+        # waveform_means and standard_deviations require the same shape across all units
         recording_sampling_frequencies = {}
-        recording_num_channels = {}
-        recording_num_channels_all = {}
+        # (block, recording) -> list of (max sparse channels per unit, num analyzer channels), one per stream/group
+        analyzer_num_channels = {}
         write_waveforms = {}
-        aggregate_groups = {}
-        # since we load recordings here, we keep a list of recordings associated to each recording name
-        # as we might need it when it comes to aggregating groups
-        recordings_associated_to_recording_name = {}
+        # (block, recording) pairs that actually exist: not all streams/recordings are present in every block
+        existing_block_recordings = set()
         for recording_name in recording_names:
             if "group" in recording_name:
                 block_str = recording_name.split("_")[0]
                 recording_str = recording_name.split("_")[-2]
                 group_str = recording_name.split("_")[-1]
                 stream_name = "_".join(recording_name.split("_")[1:-2])
-                recording_name_no_group = "_".join(recording_name.split("_")[:-1])
             else:
                 block_str = recording_name.split("_")[0]
                 recording_str = recording_name.split("_")[-1]
                 stream_name = "_".join(recording_name.split("_")[1:-1])
                 group_str = ""
-                recording_name_no_group = recording_name
 
+            existing_block_recordings.add((block_str, recording_str))
             if block_str not in block_ids:
                 block_ids.append(block_str)
             if recording_str not in recording_ids:
@@ -215,87 +222,82 @@ if __name__ == "__main__":
             if group_str not in group_ids:
                 group_ids.append(group_str)
 
-            # load the recording and check sampling rate and number of channels
+            # load the recording and check sampling rate and number of sparse channels
             recording_job_dict = None
-            recording_job_dicts_all = []
             for job_dict in job_dicts:
-                if recording_name_no_group in job_dict["recording_name"]:
-                    recording_job_dicts_all.append(job_dict)
                 if recording_name == job_dict["recording_name"]:
                     recording_job_dict = job_dict
-            if len(recording_job_dicts_all) > 0 and recording_job_dict is not None:
-                recording = si.load(recording_job_dict["recording_dict"], base_folder=data_folder)
-                recording_list = [si.load(job_dict["recording_dict"], base_folder=data_folder) for job_dict in recording_job_dicts_all]
-                recordings_associated_to_recording_name[recording_name] = recording_list
-                if (block_str, recording_str) not in recording_sampling_frequencies:
-                    recording_sampling_frequencies[(block_str, recording_str)] = {}
-                if (block_str, recording_str) not in recording_num_channels:
-                    recording_num_channels[(block_str, recording_str)] = {}
-                if (block_str, recording_str) not in recording_num_channels_all:
-                    recording_num_channels_all[(block_str, recording_str)] = {}
-                recording_sampling_frequencies[(block_str, recording_str)][stream_name] = recording.sampling_frequency
-                recording_num_channels[(block_str, recording_str)][(stream_name, group_str)] = recording.get_num_channels()
-                recording_num_channels_all[(block_str, recording_str)][stream_name] = sum([r.get_num_channels() for r in recording_list])
-            else:
+                    break
+            if recording_job_dict is None:
                 logging.info(f"Couldn't find job dict for {recording_name}")
+                continue
+            analyzer_folder = postprocessed_folder / f"{recording_name}.zarr"
+            if not analyzer_folder.is_dir():
+                analyzer_folder = postprocessed_folder / recording_name
+            if not analyzer_folder.is_dir():
+                logging.info(f"No analyzer found for {recording_name}")
+                continue
+            key = (block_str, recording_str)
+            recording = si.load(recording_job_dict["recording_dict"], base_folder=data_folder)
+            recording_sampling_frequencies.setdefault(key, {})[stream_name] = recording.sampling_frequency
+            analyzer_lazy = si.load(analyzer_folder, lazy=True)
+            num_analyzer_channels = analyzer_lazy.get_num_channels()
+            if analyzer_lazy.sparsity is None:
+                num_sparse_channels = num_analyzer_channels
+            else:
+                num_sparse_channels = int(analyzer_lazy.sparsity.mask.sum(axis=1).max())
+            analyzer_num_channels.setdefault(key, {})[recording_name] = (num_sparse_channels, num_analyzer_channels)
 
         # We first check the sampling frequencies across streams.
         # If sampling frequencies for different streams, do not write waveforms for the block/recording, because they
         # have a different number of samples
         for key, sampling_frequencies in recording_sampling_frequencies.items():
-            if len(np.unique(sampling_frequencies.values())) > 1:
+            if len(np.unique(list(sampling_frequencies.values()))) > 1:
                 logging.info(
                     f"Recordings from different blocks/groups have different sampling frequencies: {recording_sampling_frequencies}"
                 )
                 write_waveforms[key] = False
             else:
                 write_waveforms[key] = True
-        # Here we check the number of channels across streams, we have 3 options:
-        # 1. there are no channel groups OR there are channel groups with same number of channels for each stream
-        #    (.e.g, 2 NP2.0-4shank in the same experiment/recording --> each group has 96 electrodes)
-        # 2. there are channel groups, but in the same experiment/recording there is a mix of probes with/without groups,
-        #    but the sum of channels per probe is the same
-        #    (e.g. 1 NP2.0-4shank and 1 NP1.0 --> each shank has 96 electrodes, but the second probe has 384
-        # 3. there are channel groups/probes with incompatible number of channels.
-        #    (e.g., a 32-channel probe and a 384-channel probe in the same experiment/recording)
-        # For case 1, we can write waverorm_means/stds for individual groups only (96-channels)
-        # For case 2, we need to aggregate groups and pad waveforms with zeros
-        # For case 3, we cannot write waveforms
-        for key, num_channels in recording_num_channels.items():
-            if write_waveforms[key]:
-                if len(np.unique(list(num_channels.values()))) == 1:
-                    write_waveforms[key] = True
-                    aggregate_groups[key] = False
-                else:
-                    for key_all, num_channels_all in recording_num_channels_all.items():
-                        if len(np.unique(list(num_channels_all.values()))) == 1:
-                            write_waveforms[key] = True
-                            aggregate_groups[key] = True
-                        else:
-                            logging.info(
-                                f"Recordings from different blocks/groups have different number of channels: {recording_num_channels}"
-                            )
-                            write_waveforms[key] = False
-                            aggregate_groups[key] = False
+
+        # Templates are written sparse: every unit gets the same number of channels, i.e. the maximum
+        # number of sparse channels across streams/groups of the block/recording.
+        # If a stream/group has fewer channels than that (e.g., a 32-channel probe next to a 384-channel probe),
+        # we cannot write waveforms.
+        num_channels_max = {}
+        for key, num_channels in analyzer_num_channels.items():
+            num_channels_max[key] = max(n_sparse for n_sparse, _ in num_channels.values())
+            logging.info(f"Sparse templates for {key}: writing {num_channels_max[key]} channels per unit")
+            for name, (n_sparse, n_total) in num_channels.items():
+                logging.info(f"\t{name}: max sparse channels {n_sparse}, total channels {n_total}")
+            if num_channels_max[key] > min(n_total for _, n_total in num_channels.values()):
+                logging.info(
+                    f"Max number of sparse channels ({num_channels_max[key]}) exceeds the number of channels of "
+                    f"some streams/groups for {key}: {num_channels}. Skipping waveforms."
+                )
+                write_waveforms[key] = False
 
         block_ids = sorted(block_ids)
         recording_ids = sorted(recording_ids)
         streams_to_process = sorted(stream_names)
 
-        logging.info(f"Number of NWB files to write: {len(block_ids) * len(recording_ids)}")
+        logging.info(f"Number of NWB files to write: {len(existing_block_recordings)}")
         logging.info(f"Number of streams to write for each file: {len(streams_to_process)}")
 
         nwb_output_files = []
         multi_input_files = False
         if len(nwb_files) > 1:
-            assert len(nwb_files) >= len(block_ids) * len(recording_ids), (
+            assert len(nwb_files) >= len(existing_block_recordings), (
                 "Inconsistent number of input NWB files with number of blocks and recordings: "
-                f"Num NWB files: {len(nwb_files)} - Num files to write: {len(block_ids) * len(recording_ids)}"
+                f"Num NWB files: {len(nwb_files)} - Num files to write: {len(existing_block_recordings)}"
             )
             multi_input_files = True
 
         for block_index, block_str in enumerate(block_ids):
             for segment_index, recording_str in enumerate(recording_ids):
+                if (block_str, recording_str) not in existing_block_recordings:
+                    logging.info(f"No recordings found for {block_str} - {recording_str}. Skipping")
+                    continue
                 # add recording/experiment id if needed
                 if multi_input_files:
                     nwb_input_path_for_current = [
@@ -331,11 +333,14 @@ if __name__ == "__main__":
                     ecephys_session_folder
                 )
 
+                # an input NWB from a previous run (e.g. curation pipeline) has a units table to replace
+                remove_units_table(nwbfile_output_path)
+
                 with io_class(str(nwbfile_output_path), "a") as append_io:
                     nwbfile = append_io.read()
 
                     added_stream_names = []
-                    for stream_index, stream_name in enumerate(streams_to_process):
+                    for stream_name in streams_to_process:
                         stream_str = str(stream_name)
                         for group_str in group_ids:
                             recording_name = f"{block_str}_{stream_name}_{recording_str}"
@@ -368,23 +373,19 @@ if __name__ == "__main__":
                                 logging.info(f"\tSetting synced timestamps from {timestamps_file}")
                                 timestamps = np.load(timestamps_file)
                                 recording.set_times(timestamps)
+                            # a zarr-backed time vector stays lazy, and neuroconv indexes it once per unit,
+                            # decoding the whole vector each time; a full-range get_times caches it in memory
+                            for segment_index in range(recording.get_num_segments()):
+                                if recording.has_time_vector(segment_index):
+                                    recording.get_times(segment_index)
 
                             # Add device and electrode group
-                            # For the NWB case, since the parser only read channel locations, the job-dispatch creates
-                            # a probe with the correct probe_device_name, so that neuroconv uses the right existing device
-                            if recording_job_dict.get("probe_dict") is not None:
-                                logging.info(f"\tAdding probe information from job-dispatch metadata")
-                                probe_dict = recording_job_dict["probe_dict"]
-                                probe = pi.Probe.from_dict(probe_dict)
-                                electrode_group_location = probe.annotations.get("electrode_group_location", "unknown")
-                            else:
-                                logging.info(f"\tAdding probe information from recording metadata")
-                                probegroup = recording.get_probegroup()
-                                assert len(probegroup.probes) == 1, (
-                                    "Grouping failed for this session. Each stream should be associated with a single probe!"
-                                )
-                                probe = probegroup.probes[0]
-                                electrode_group_location = "unknown"
+                            probegroup = recording.get_probegroup()
+                            assert len(probegroup.probes) == 1, (
+                                "Grouping failed for this session. Each stream should be associated with a single probe!"
+                            )
+                            probe = probegroup.probes[0]
+                            electrode_group_location = "unknown"
 
                             # 1. Look for AIND devices in metadata and use them if they match the stream name
                             probe_device_name = None
@@ -524,15 +525,6 @@ if __name__ == "__main__":
                                     sorter_name = sorter_log["sorter_name"]
                                     units_description += f" from {sorter_name.capitalize()}"
 
-                            recording_list = recordings_associated_to_recording_name[recording_name]
-                            if aggregate_groups[(block_str, recording_str)]:
-                                # Add channel properties (group_name property to associate electrodes with group)
-                                if aggregate_groups[(block_str, recording_str)] and len(recording_list) > 1:
-                                    logging.info(f"Aggregating {len(recording_list)} for {recording_name}")
-                                    recording = si.aggregate_channels(recording_list)
-                                else:
-                                    recording = recording_list[0]
-
                             channel_groups = recording.get_channel_groups()
                             if group_str == "":
                                 # single shank probe
@@ -567,6 +559,7 @@ if __name__ == "__main__":
                                 skip_properties=skip_unit_properties,
                                 units_description=units_description,
                                 write_waveforms=write_waveforms[(block_str, recording_str)],
+                                num_channels_max=num_channels_max.get((block_str, recording_str)),
                             )
                     logging.info(f"Added {len(added_stream_names)} streams")
 
@@ -588,3 +581,12 @@ if __name__ == "__main__":
     t_export_end = time.perf_counter()
     elapsed_time_export = np.round(t_export_end - t_export_start, 2)
     logging.info(f"NWB EXPORT UNITS time: {elapsed_time_export}s")
+    logging.info("Pipeline stage completed", extra={"event_type": "stage_complete"})
+
+
+if __name__ == "__main__":
+    try:
+        run()
+    except Exception as e:
+        logging.exception("Pipeline stage failed", extra={"event_type": "stage_error"})
+        raise
