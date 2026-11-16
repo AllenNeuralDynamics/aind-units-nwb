@@ -32,6 +32,7 @@ def add_waveforms_with_uneven_channels(
         add_electrodes_to_nwbfile,
         _add_units_table_to_nwbfile,
         _get_electrode_group_indices,
+        _get_unit_spike_times,
     )
 
     # TODO: move into add_units
@@ -121,6 +122,7 @@ def add_waveforms_with_uneven_channels(
         sorting=sorting_copy,
         nwbfile=nwbfile,
         unit_ids=unit_ids,
+        unit_spike_times=_get_unit_spike_times(sorting=sorting_copy, unit_ids=unit_ids),
         property_descriptions=property_descriptions,
         skip_properties=skip_properties,
         write_in_processing_module=write_in_processing_module,
