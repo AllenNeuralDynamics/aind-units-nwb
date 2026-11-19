@@ -73,6 +73,7 @@ UNIT_PROPERTY_DESCRIPTIONS = {
     "estimated_y": "Estimated y position of the unit on the probe (SpikeInterface unit_locations), in micrometers.",
     "estimated_z": "Estimated z position of the unit (SpikeInterface unit_locations), in micrometers.",
     "extremum_channel_index": "Index of the channel with the largest template amplitude (extremum channel).",
+    "main_channel_id": "ID of the main channel for for each unit.",
     "default_qc": "Whether the unit passes the default quality-control metric thresholds.",
     "bombcell_label": "Unit label from Bombcell curation (e.g. good, mua, noise, non_soma).",
     "unitrefine_label": "Unit label from the UnitRefine classifiers (e.g. noise, sua, mua).",
