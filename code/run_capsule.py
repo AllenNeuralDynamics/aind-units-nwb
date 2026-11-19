@@ -54,7 +54,30 @@ skip_unit_properties = [
     "KSLabel_repeat",
     "ContamPct",
     "Amplitude",
+    # kept upstream only for backward compatibility: use unitrefine_label/unitrefine_probability
+    "decoder_label",
+    "decoder_probability",
 ]
+
+INTER_SAMPLE_SHIFT_DESCRIPTION = (
+    "Sampling time offset of the channel within a sample period (ADC multiplexing), as a fraction of a sample."
+)
+
+UNIT_PROPERTY_DESCRIPTIONS = {
+    "original_unit_id": "Unit ID in the spike sorting output (after curation).",
+    "device_name": "Name of the probe device the unit was recorded from.",
+    "shank": "Shank (channel group) the unit was recorded from. Empty for single-shank probes.",
+    "amplitude": "Peak-to-peak amplitude of the unit template on its main channel, in microvolts.",
+    "depth": "Estimated depth of the unit along the probe axis (same as estimated_y), in micrometers.",
+    "estimated_x": "Estimated x position of the unit on the probe (SpikeInterface unit_locations), in micrometers.",
+    "estimated_y": "Estimated y position of the unit on the probe (SpikeInterface unit_locations), in micrometers.",
+    "estimated_z": "Estimated z position of the unit (SpikeInterface unit_locations), in micrometers.",
+    "extremum_channel_index": "Index of the channel with the largest template amplitude (extremum channel).",
+    "default_qc": "Whether the unit passes the default quality-control metric thresholds.",
+    "bombcell_label": "Unit label from Bombcell curation (e.g. good, mua, noise, non_soma).",
+    "unitrefine_label": "Unit label from the UnitRefine classifiers (e.g. noise, sua, mua).",
+    "unitrefine_probability": "Probability associated with the UnitRefine label.",
+}
 
 PARAMS_FILE = Path("../params.json")
 
@@ -447,6 +470,7 @@ def run():
                             electrode_metadata = dict(
                                 Ecephys=dict(
                                     Device=[dict(name=probe_device_name)],
+                                    Electrodes=[dict(name="inter_sample_shift", description=INTER_SAMPLE_SHIFT_DESCRIPTION)],
                                 )
                             )
 
@@ -476,14 +500,14 @@ def run():
                                     )
                                     continue
 
-                            # Add unit properties (UUID and probe info, ks_unit_id)
+                            # Add unit properties (UUID and probe info, original_unit_id)
                             unit_uuids = [str(uuid4()) for u in sorting_curated.unit_ids]
                             sorting_curated.set_property(
                                 "device_name", [probe_device_name] * sorting_curated.get_num_units()
                             )
                             sorting_curated.set_property("shank", [group_str] * sorting_curated.get_num_units())
                             sorting_curated.set_property("unit_name", unit_uuids)
-                            sorting_curated.set_property("ks_unit_id", sorting_curated.unit_ids)
+                            sorting_curated.set_property("original_unit_id", sorting_curated.unit_ids)
 
                             # Add 'amplitude' property
                             amplitudes = si.get_template_amplitude_on_main_channel(analyzer, peak_mode="peak_to_peak", with_dict=False)
@@ -552,6 +576,7 @@ def run():
                                 nwbfile=nwbfile,
                                 metadata=electrode_metadata,
                                 skip_properties=skip_unit_properties,
+                                property_descriptions=dict(UNIT_PROPERTY_DESCRIPTIONS),
                                 units_description=units_description,
                                 write_waveforms=write_waveforms[(block_str, recording_str)],
                                 num_channels_max=num_channels_max.get((block_str, recording_str)),
